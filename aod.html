@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>Always On Display</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            height: 100%;
+            background: #000;
+            color: #e6e6e6;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: transform 2s ease;
+        }
+        #time {
+            font-size: clamp(64px, 22vw, 160px);
+            font-weight: 200;
+            letter-spacing: -2px;
+            font-variant-numeric: tabular-nums;
+        }
+        #date {
+            font-size: clamp(16px, 4.5vw, 24px);
+            color: #8a8a8a;
+        }
+        #task {
+            margin-top: 24px;
+            max-width: 90vw;
+            font-size: clamp(20px, 6vw, 34px);
+            color: #7fd1ff;
+            word-wrap: break-word;
+            cursor: pointer;
+        }
+        #task.empty { color: #444; font-size: 18px; }
+        #hint {
+            position: fixed;
+            bottom: max(16px, env(safe-area-inset-bottom));
+            left: 0; right: 0;
+            text-align: center;
+            font-size: 13px;
+            color: #333;
+        }
+        body.dim #screen { opacity: 0.55; }
+        #editor {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.92);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 16px;
+        }
+        #editor.open { display: flex; }
+        #editor input {
+            width: 100%;
+            max-width: 480px;
+            padding: 14px;
+            font-size: 18px;
+            border-radius: 10px;
+            border: 1px solid #333;
+            background: #111;
+            color: #fff;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        #editor .row { display: flex; gap: 10px; }
+        #editor button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 10px;
+            border: 0;
+            background: #1e88e5;
+            color: #fff;
+        }
+        #editor button.secondary { background: #333; }
+    </style>
+</head>
+<body>
+    <div id="screen">
+        <div id="time">--:--</div>
+        <div id="date"></div>
+        <div id="task" class="empty">Tap here to set your task</div>
+    </div>
+    <div id="hint">Tap screen to keep awake · double-tap to dim · tap task to edit</div>
+
+    <div id="editor">
+        <input id="taskInput" type="text" maxlength="120" placeholder="What are you working on?">
+        <div class="row">
+            <button id="save">Save</button>
+            <button id="clear" class="secondary">Clear</button>
+            <button id="cancel" class="secondary">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const $ = (id) => document.getElementById(id);
+        const timeEl = $("time"), dateEl = $("date"), taskEl = $("task");
+        const editor = $("editor"), input = $("taskInput"), hint = $("hint");
+
+        // ---- Clock ----
+        function tick() {
+            const now = new Date();
+            timeEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            dateEl.textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+        }
+        tick();
+        setInterval(tick, 1000);
+
+        // ---- Task (saved on this phone) ----
+        function load() {
+            try { return localStorage.getItem("aod-task") || ""; } catch (e) { return ""; }
+        }
+        function store(v) {
+            try { localStorage.setItem("aod-task", v); } catch (e) {}
+        }
+        function render(v) {
+            if (v) { taskEl.textContent = v; taskEl.classList.remove("empty"); }
+            else { taskEl.textContent = "Tap here to set your task"; taskEl.classList.add("empty"); }
+        }
+        render(load());
+
+        taskEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            input.value = load();
+            editor.classList.add("open");
+            input.focus();
+        });
+        $("save").onclick = () => { store(input.value.trim()); render(input.value.trim()); editor.classList.remove("open"); };
+        $("clear").onclick = () => { store(""); render(""); editor.classList.remove("open"); };
+        $("cancel").onclick = () => editor.classList.remove("open");
+        input.addEventListener("keydown", (e) => { if (e.key === "Enter") $("save").click(); });
+
+        // ---- Keep the screen on (Wake Lock API) ----
+        let wakeLock = null;
+        async function keepAwake() {
+            try {
+                if ("wakeLock" in navigator && !wakeLock) {
+                    wakeLock = await navigator.wakeLock.request("screen");
+                    wakeLock.addEventListener("release", () => { wakeLock = null; });
+                    hint.textContent = "Screen will stay on · double-tap to dim · tap task to edit";
+                }
+            } catch (e) {
+                hint.textContent = "Couldn't keep screen on — set screen timeout to max in phone settings";
+            }
+        }
+        if (!("wakeLock" in navigator)) {
+            hint.textContent = "Your browser can't keep the screen on — set screen timeout to max";
+        }
+        keepAwake();
+        document.addEventListener("click", keepAwake);
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") keepAwake();
+        });
+
+        // Fullscreen on first tap (where supported)
+        document.addEventListener("click", () => {
+            const el = document.documentElement;
+            if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+        }, { once: true });
+
+        // Double-tap to dim
+        let lastTap = 0;
+        $("screen").addEventListener("click", () => {
+            const t = Date.now();
+            if (t - lastTap < 350) document.body.classList.toggle("dim");
+            lastTap = t;
+        });
+
+        // ---- Burn-in protection: nudge content slightly every minute ----
+        setInterval(() => {
+            const x = Math.round((Math.random() - 0.5) * 30);
+            const y = Math.round((Math.random() - 0.5) * 60);
+            $("screen").style.transform = `translate(${x}px, ${y}px)`;
+        }, 60000);
+    </script>
+</body>
+</html>
