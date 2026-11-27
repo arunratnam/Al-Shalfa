@@ -1,0 +1,79 @@
+rules_version = '2';
+// Security rules for the EZ Storage fuel claims app.
+// Roles live in users/{uid}.role: driver | verifier | approver | admin
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signedIn() && me().active != false; }
+    function role() { return me().role; }
+    function isStaff() { return active() && role() in ['verifier', 'approver', 'admin']; }
+    function isAdmin() { return active() && role() == 'admin'; }
+    function unchanged(fields) { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields); }
+
+    // ---- people ----
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isStaff());
+      // new accounts always start as an active driver
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'driver' && request.resource.data.active == true;
+      // people edit their own details, never their role or active flag
+      allow update: if (signedIn() && request.auth.uid == uid && unchanged(['role', 'active', 'email']))
+        || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---- claim numbers ----
+    match /counters/{id} {
+      allow read, write: if active();
+    }
+
+    // ---- claims ----
+    match /claims/{claimId} {
+      function owner() { return resource.data.ownerUid == request.auth.uid; }
+      function office() { return ['verifiedBy', 'verifiedByUid', 'verifiedAt', 'approvedBy', 'approvedByUid', 'approvedAt',
+                                  'amountApproved', 'approverSignature', 'paidAt', 'paidRef']; }
+
+      allow read: if active() && (owner() || (isStaff() && resource.data.status != 'draft'));
+
+      // drivers create their own claims as a draft or straight as submitted
+      allow create: if active() && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status in ['draft', 'submitted']
+        && !request.resource.data.keys().hasAny(office());
+
+      // drivers change their claim only while it's a draft or returned, and can only (re)submit it
+      allow update: if (active() && owner() && resource.data.status in ['draft', 'returned']
+                        && request.resource.data.ownerUid == request.auth.uid
+                        && request.resource.data.status in ['draft', 'submitted']
+                        && unchanged(office()))
+        // verifiers: submitted -> verified / returned / rejected
+        || (isStaff() && role() == 'verifier' && resource.data.status == 'submitted'
+            && request.resource.data.status in ['verified', 'returned', 'rejected']
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && unchanged(['receipts', 'approvedBy', 'approvedByUid', 'approvedAt', 'amountApproved', 'approverSignature', 'paidAt', 'paidRef']))
+        // approvers: verified -> approved / returned / rejected, approved -> paid
+        || (isStaff() && role() == 'approver'
+            && ((resource.data.status == 'verified' && request.resource.data.status in ['approved', 'returned', 'rejected'])
+                || (resource.data.status == 'submitted' && request.resource.data.status in ['returned', 'rejected'])
+                || (resource.data.status == 'approved' && request.resource.data.status == 'paid'))
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && unchanged(['receipts', 'driverSignature']))
+        // administrators can do any step
+        || isAdmin();
+
+      allow delete: if (active() && owner() && resource.data.status == 'draft') || isAdmin();
+
+      // receipt photos (stored here so the free plan is enough)
+      match /photos/{photoId} {
+        function claim() { return get(/databases/$(database)/documents/claims/$(claimId)).data; }
+        allow read: if active() && (claim().ownerUid == request.auth.uid || (isStaff() && claim().status != 'draft'));
+        allow create: if active() && claim().ownerUid == request.auth.uid
+          && claim().status in ['draft', 'returned']
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
+        allow delete: if active() && claim().ownerUid == request.auth.uid && claim().status in ['draft', 'returned'];
+      }
+    }
+  }
+}

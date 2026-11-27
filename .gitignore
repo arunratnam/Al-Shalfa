@@ -1,3 +1,6 @@
 android-app/build/
 android-app/*.keystore
 windows-app/*.zip
+fuel-app/android/build/
+fuel-app/android/*.keystore
+fuel-app/android/*.idsig

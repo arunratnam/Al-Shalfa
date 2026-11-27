@@ -1,0 +1,14 @@
+{
+  "name": "EZ Storage Fuel Claims",
+  "short_name": "EZ Fuel",
+  "description": "Submit fuel receipts, track approval and download claim PDFs.",
+  "start_url": "./index.html#/home",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#c8102e",
+  "icons": [
+    { "src": "img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small stand-in for Android's own resource table: only the manifest attributes this app
+     uses, with their real Android IDs (from android.R.attr). Lets the Ubuntu aapt tool
+     write a manifest for current Android versions. -->
+<manifest package="android" />

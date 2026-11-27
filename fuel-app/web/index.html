@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>EZ Fuel Claims</title>
+  <meta name="description" content="Submit fuel receipts, track approval and download claim PDFs.">
+  <meta name="theme-color" content="#c8102e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="EZ Fuel">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="img/icon-192.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header id="topbar" class="topbar" hidden></header>
+  <div id="demo" class="demo-banner" hidden>Demo mode: data stays on this device until the company database is connected.</div>
+  <nav id="nav" class="nav" hidden aria-label="Main"></nav>
+  <main id="main"></main>
+
+  <script src="config.js"></script>
+  <script>
+    // Load Firebase only when the app is connected to it.
+    if (window.EZ_CONFIG && window.EZ_CONFIG.firebase) {
+      document.write('<script src="vendor/firebase-app-compat.js"><\/script><script src="vendor/firebase-auth-compat.js"><\/script><script src="vendor/firebase-firestore-compat.js"><\/script>');
+    }
+  </script>
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="img/logo.js"></script>
+  <script src="store.js"></script>
+  <script src="pdf.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
