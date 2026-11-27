@@ -1,6 +1,6 @@
 /*
- * Data layer. Two interchangeable back ends with the same API:
- *   - DemoStore: everything on this device (localStorage + IndexedDB), with demo people.
+ * Data layer. Two back ends with the same API:
+ *   - LocalStore (default): one driver per phone; claims in localStorage, photos in IndexedDB.
  *   - FirebaseStore: Firebase Auth + Cloud Firestore (receipt photos are stored in Firestore,
  *     so the free Spark plan is enough; no Cloud Storage bucket is needed).
  *
@@ -89,11 +89,11 @@
     return c;
   }
 
-  // ------------------------------------------------------------------ small IndexedDB helper (demo photos)
+  // ------------------------------------------------------------------ small IndexedDB helper (photos on the phone)
 
   function idb() {
     return new Promise(function (res, rej) {
-      var r = indexedDB.open("ezfuel-demo", 1);
+      var r = indexedDB.open("ezfuel-photos", 1);
       r.onupgradeneeded = function () {
         r.result.createObjectStore("photos");
       };
@@ -120,6 +120,12 @@
     });
   }
 
+  function idbDel(key) {
+    return idb().then(function (d) {
+      d.transaction("photos", "readwrite").objectStore("photos").delete(key);
+    }).catch(function () {});
+  }
+
   function idbPut(key, val) {
     return idb().then(function (d) {
       return new Promise(function (res, rej) {
@@ -135,188 +141,80 @@
     });
   }
 
-  /** Draws a sample fuel receipt for the demo data (marked as a sample). */
-  function demoReceipt(f) {
-    var cv = document.createElement("canvas");
-    cv.width = 420;
-    cv.height = 620;
-    var g = cv.getContext("2d");
-    g.fillStyle = "#e9e6df";
-    g.fillRect(0, 0, 420, 620);
-    g.fillStyle = "#fffdf8";
-    g.fillRect(40, 20, 340, 580);
-    g.fillStyle = "#222";
-    g.textAlign = "center";
-    g.font = "bold 24px monospace";
-    g.fillText(String(f[0]).toUpperCase(), 210, 80);
-    g.font = "16px monospace";
-    g.fillText("FUEL RECEIPT", 210, 110);
-    g.fillText("-----------------------------", 210, 140);
-    g.textAlign = "left";
-    var rows = [["DATE", f[1]], ["PRODUCT", "SUPER 95"], ["LITRES", Number(f[2]).toFixed(2)], ["PRICE/L", (Number(f[3]) / Number(f[2])).toFixed(3) + " KD"], ["ODOMETER", f[4] + " KM"]];
-    rows.forEach(function (r, i) {
-      g.fillText(r[0], 70, 180 + i * 34);
-      g.textAlign = "right";
-      g.fillText(r[1], 350, 180 + i * 34);
-      g.textAlign = "left";
-    });
-    g.textAlign = "center";
-    g.fillText("-----------------------------", 210, 360);
-    g.font = "bold 26px monospace";
-    g.fillText("TOTAL  " + Number(f[3]).toFixed(3) + " KD", 210, 405);
-    g.font = "15px monospace";
-    g.fillText("PAID BY CARD", 210, 445);
-    g.fillText("THANK YOU", 210, 520);
-    g.fillStyle = "rgba(200,16,46,.75)";
-    g.font = "bold 20px sans-serif";
-    g.fillText("SAMPLE (DEMO DATA)", 210, 575);
-    return cv.toDataURL("image/jpeg", 0.8);
-  }
+  // ------------------------------------------------------------------ On-phone store (one driver per phone)
 
-  // ------------------------------------------------------------------ Demo store
+  function LocalStore() {
+    var PROFILE = "ezfuel-profile", CLAIMS = "ezfuel-claims", COUNTER = "ezfuel-counter";
+    var profile = read(PROFILE, null);
+    var claims = read(CLAIMS, []);
+    var authCbs = [], claimCbs = [];
 
-  function DemoStore() {
-    var KEY = "ezfuel-demo-v1";
-    var state = load();
-    var authCbs = [], claimCbs = [], userCbs = [];
-    var current = null;
-
-    function load() {
+    function read(k, def) {
       try {
-        var s = JSON.parse(localStorage.getItem(KEY));
-        if (s && s.users) return s;
-      } catch (e) {}
-      return seed();
+        var v = JSON.parse(localStorage.getItem(k));
+        return v === null || v === undefined ? def : v;
+      } catch (e) {
+        return def;
+      }
     }
 
-    function persist() {
+    function write(k, v) {
       try {
-        localStorage.setItem(KEY, JSON.stringify(state));
-      } catch (e) {}
-    }
-
-    function emitClaims() {
-      claimCbs.forEach(function (w) {
-        w.cb(scoped(w.scope));
-      });
-    }
-
-    function emitUsers() {
-      userCbs.forEach(function (cb) {
-        cb(state.users.slice());
-      });
-    }
-
-    function scoped(scope) {
-      var list = state.claims.filter(function (c) {
-        return scope === "all" ? isStaff(current) && c.status !== "draft" : current && c.ownerUid === current.uid;
-      });
-      return list.sort(function (a, b) {
-        return (b.updatedAt || 0) - (a.updatedAt || 0);
-      });
-    }
-
-    function seed() {
-      var users = [
-        { uid: "u-driver", name: "Ahmed Al-Rashid", email: "driver@example.com", employeeId: "EZ-1042", department: "Delivery", vehicle: "KWT 12-34567", role: "driver", active: true, sample: true },
-        { uid: "u-driver2", name: "Ravi Kumar", email: "driver2@example.com", employeeId: "EZ-1077", department: "Logistics", vehicle: "KWT 45-11223", role: "driver", active: true, sample: true },
-        { uid: "u-verifier", name: "Sara Office", email: "office@example.com", employeeId: "EZ-0210", department: "Administration", vehicle: "", role: "verifier", active: true, sample: true },
-        { uid: "u-approver", name: "Khalid Manager", email: "manager@example.com", employeeId: "EZ-0101", department: "Operations", vehicle: "", role: "approver", active: true, sample: true },
-        { uid: "u-admin", name: "Admin", email: "admin@example.com", employeeId: "EZ-0001", department: "Administration", vehicle: "", role: "admin", active: true, sample: true }
-      ];
-      var d = new Date();
-      function day(offset) {
-        var x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + offset);
-        return x.toISOString().slice(0, 10);
+        localStorage.setItem(k, JSON.stringify(v));
+      } catch (e) {
+        throw new Error("The phone's storage is full. Delete old claims or free some space.");
       }
-      function r(off, station, odo, litres, amount) {
-        return { id: "r" + Math.random().toString(36).slice(2, 8), date: day(off), station: station, odometer: odo, litres: litres, amount: amount,
-          photoId: "demo:" + encodeURIComponent([station, day(off), litres, amount, odo].join("|")) };
-      }
-      var claims = [];
-      function claim(no, owner, status, offsetFrom, receipts, extra) {
-        var u = users.filter(function (x) { return x.uid === owner; })[0];
-        var c = {
-          id: "c" + no, claimNo: "EZ-FUEL-" + d.getFullYear() + "-" + ("000" + no).slice(-4), sample: true,
-          ownerUid: owner, driverName: u.name, employeeId: u.employeeId, vehicle: u.vehicle, department: u.department,
-          periodFrom: day(offsetFrom), periodTo: day(offsetFrom + 13), submissionDate: day(offsetFrom + 14),
-          receipts: receipts, declaration: true, driverSignature: "", status: "draft",
-          history: [], createdAt: now() - (60 - no) * 86400000, updatedAt: now() - (60 - no) * 86400000
-        };
-        c.totals = totals(receipts);
-        var steps = { submitted: ["submit"], verified: ["submit", "verify"], approved: ["submit", "verify", "approve"],
-          paid: ["submit", "verify", "approve", "pay"], returned: ["submit", "return"] }[status] || [];
-        steps.forEach(function (s, i) {
-          var actor = s === "submit" ? u : s === "verify" || s === "return" ? users[2] : users[3];
-          c = applyAction(c, s, actor, s === "approve" ? { amountApproved: c.totals.amount } :
-            s === "pay" ? { reference: "TRF-" + (8800 + no) } : s === "return" ? { note: "Receipt 2 photo is not readable. Please retake it." } : {});
-          c.history[c.history.length - 1].at = c.createdAt + (i + 1) * 86400000;
-        });
-        for (var k in extra) c[k] = extra[k];
-        claims.push(c);
-      }
-      claim(1, "u-driver", "paid", -50, [r(-50, "KNPC Salmiya", 84210, 42.5, 3.570), r(-45, "Oula Hawally", 84702, 40.1, 3.368), r(-40, "Alfa Fuel Shuwaikh", 85190, 44.0, 3.696)]);
-      claim(2, "u-driver2", "approved", -35, [r(-35, "KNPC Jahra", 120400, 55.2, 4.637), r(-30, "Oula Sulaibiya", 121020, 51.7, 4.343)]);
-      claim(3, "u-driver", "verified", -20, [r(-20, "KNPC Salmiya", 85690, 41.8, 3.511), r(-16, "Soor Fuel Farwaniya", 86160, 39.5, 3.318), r(-12, "Oula Hawally", 86655, 43.2, 3.629)]);
-      claim(4, "u-driver2", "submitted", -14, [r(-14, "KNPC Jahra", 121600, 53.0, 4.452), r(-9, "Alfa Fuel Ardiya", 122180, 49.9, 4.192)]);
-      claim(5, "u-driver", "returned", -10, [r(-10, "KNPC Fintas", 87120, 38.6, 3.242), r(-6, "Oula Mangaf", 87590, 42.0, 3.528)]);
-      return { users: users, claims: claims, counter: 5 };
+    }
+
+    function emit() {
+      var list = claims.slice().sort(function (x, y) { return (y.updatedAt || 0) - (x.updatedAt || 0); });
+      claimCbs.forEach(function (cb) { cb(list); });
+    }
+
+    function tellAuth() {
+      authCbs.forEach(function (cb) { cb(profile); });
     }
 
     return {
-      mode: "demo",
+      mode: "local",
       ROLES: ROLES,
       init: function () {
         return Promise.resolve();
       },
-      demoUsers: function () {
-        return state.users.slice();
-      },
       onAuth: function (cb) {
         authCbs.push(cb);
-        var uid = sessionStorage.getItem("ezfuel-demo-uid");
-        current = state.users.filter(function (u) { return u.uid === uid; })[0] || null;
-        setTimeout(function () { cb(current); }, 0);
+        setTimeout(function () { cb(profile); }, 0);
       },
-      signInDemo: function (uid) {
-        current = state.users.filter(function (u) { return u.uid === uid; })[0] || null;
-        sessionStorage.setItem("ezfuel-demo-uid", uid);
-        authCbs.forEach(function (cb) { cb(current); });
-        return Promise.resolve(current);
+      createProfile: function (f) {
+        profile = { uid: "me", name: f.name, employeeId: f.employeeId, department: f.department, vehicle: f.vehicle, role: "driver", active: true };
+        write(PROFILE, profile);
+        tellAuth();
+        return Promise.resolve(profile);
       },
-      signIn: function () {
-        return Promise.reject(new Error("Demo mode: pick a person below to try the app."));
-      },
-      signUp: function () {
-        return Promise.reject(new Error("Demo mode: accounts are created once Firebase is connected."));
-      },
-      resetPassword: function () {
-        return Promise.reject(new Error("Demo mode has no passwords."));
+      updateProfile: function (f) {
+        ["name", "employeeId", "department", "vehicle"].forEach(function (k) { if (k in f) profile[k] = f[k]; });
+        write(PROFILE, profile);
+        tellAuth();
+        return Promise.resolve(profile);
       },
       signOut: function () {
-        current = null;
-        sessionStorage.removeItem("ezfuel-demo-uid");
-        authCbs.forEach(function (cb) { cb(null); });
         return Promise.resolve();
       },
-      updateProfile: function (fields) {
-        for (var k in fields) current[k] = fields[k];
-        persist();
-        authCbs.forEach(function (cb) { cb(current); });
-        return Promise.resolve(current);
-      },
       watchClaims: function (scope, cb) {
-        var w = { scope: scope, cb: cb };
-        claimCbs.push(w);
-        setTimeout(function () { cb(scoped(scope)); }, 0);
+        if (scope !== "mine") return function () {};
+        claimCbs.push(cb);
+        setTimeout(emit, 0);
         return function () {
-          claimCbs = claimCbs.filter(function (x) { return x !== w; });
+          claimCbs = claimCbs.filter(function (x) { return x !== cb; });
         };
       },
       newClaimNo: function () {
-        state.counter++;
-        persist();
-        return Promise.resolve("EZ-FUEL-" + new Date().getFullYear() + "-" + ("000" + state.counter).slice(-4));
+        var year = new Date().getFullYear(), c = read(COUNTER, { year: year, next: 1 });
+        if (c.year !== year) c = { year: year, next: 1 };
+        var n = c.next;
+        write(COUNTER, { year: year, next: n + 1 });
+        var emp = String(profile.employeeId || "").replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
+        return Promise.resolve("FUEL-" + (emp ? emp + "-" : "") + year + "-" + ("00" + n).slice(-3));
       },
       saveClaim: function (claim) {
         claim.updatedAt = now();
@@ -325,53 +223,61 @@
           claim.createdAt = now();
         }
         claim.totals = totals(claim.receipts);
-        var i = state.claims.map(function (c) { return c.id; }).indexOf(claim.id);
-        if (i >= 0) state.claims[i] = claim;
-        else state.claims.push(claim);
-        persist();
-        emitClaims();
-        return Promise.resolve(claim);
+        var copy = JSON.parse(JSON.stringify(claim));
+        var i = claims.map(function (c) { return c.id; }).indexOf(claim.id);
+        if (i >= 0) claims[i] = copy;
+        else claims.push(copy);
+        try {
+          write(CLAIMS, claims);
+        } catch (e) {
+          return Promise.reject(e);
+        }
+        emit();
+        return Promise.resolve(copy);
       },
       deleteClaim: function (id) {
-        state.claims = state.claims.filter(function (c) { return c.id !== id; });
-        persist();
-        emitClaims();
+        var gone = claims.filter(function (c) { return c.id === id; })[0];
+        claims = claims.filter(function (c) { return c.id !== id; });
+        write(CLAIMS, claims);
+        emit();
+        if (gone) {
+          (gone.receipts || []).forEach(function (r) { if (r.photoId) idbDel(r.photoId); });
+        }
         return Promise.resolve();
       },
+      /** On the phone the driver moves their own claim: finish (submit), mark paid, or reopen. */
       act: function (claim, action, data) {
-        if (!can(current, action, claim)) return Promise.reject(new Error("You can't do that on this claim."));
-        var c = applyAction(claim, action, current, data);
+        var c = JSON.parse(JSON.stringify(claim));
+        data = data || {};
+        c.history = c.history || [];
+        if (action === "submit") {
+          c.status = "submitted";
+          c.submittedAt = now();
+          c.submissionDate = c.submissionDate || new Date().toISOString().slice(0, 10);
+        } else if (action === "markPaid") {
+          c.status = "paid";
+          c.paidAt = data.paidAt || now();
+          c.paidAmount = Number(data.amount);
+          c.paidRef = data.reference || "";
+        } else if (action === "reopen") {
+          c.status = "submitted";
+          delete c.paidAt;
+          delete c.paidAmount;
+          delete c.paidRef;
+        } else {
+          return Promise.reject(new Error("Unknown action"));
+        }
+        c.history.push({ status: c.status, action: action, byUid: "me", byName: profile.name, at: now(), note: data.note || "" });
         return this.saveClaim(c);
       },
       savePhoto: function (claimId, dataUrl) {
         var id = "p" + now() + Math.random().toString(36).slice(2, 6);
-        return idbPut(id, dataUrl).then(function () { return id; });
+        return idbPut(id, dataUrl).then(function () { return id; }).catch(function () {
+          throw new Error("Couldn't store the photo. The phone may be out of space.");
+        });
       },
       getPhoto: function (claimId, photoId) {
-        if (photoId && photoId.indexOf("demo:") === 0) return Promise.resolve(demoReceipt(decodeURIComponent(photoId.slice(5)).split("|")));
         return photoId ? idbGet(photoId) : Promise.resolve(null);
-      },
-      watchUsers: function (cb) {
-        userCbs.push(cb);
-        setTimeout(function () { cb(state.users.slice()); }, 0);
-        return function () {
-          userCbs = userCbs.filter(function (x) { return x !== cb; });
-        };
-      },
-      setUser: function (uid, fields) {
-        state.users.forEach(function (u) {
-          if (u.uid === uid) for (var k in fields) u[k] = fields[k];
-        });
-        persist();
-        emitUsers();
-        return Promise.resolve();
-      },
-      resetDemo: function () {
-        localStorage.removeItem(KEY);
-        state = seed();
-        persist();
-        emitClaims();
-        emitUsers();
       }
     };
   }
@@ -562,7 +468,7 @@
   }
 
   var cfg = window.EZ_CONFIG || {};
-  var store = cfg.firebase && window.firebase ? FirebaseStore(cfg.firebase) : DemoStore();
+  var store = cfg.firebase && window.firebase ? FirebaseStore(cfg.firebase) : LocalStore();
   store.STATUS = STATUS;
   store.ROLE_LABELS = ROLE_LABELS;
   store.ACTIONS = ACTIONS;

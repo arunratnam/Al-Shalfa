@@ -107,14 +107,17 @@ public class MainActivity extends Activity {
                 if (pendingFiles != null) pendingFiles.onReceiveValue(null);
                 pendingFiles = cb;
                 Intent camera = cameraIntent();
-                Intent pick = new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
-                Intent go;
-                if (p.isCaptureEnabled() && camera != null) {
-                    go = camera;
-                } else {
-                    go = Intent.createChooser(pick, "Receipt photo");
-                    if (camera != null) go.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+                if (p.isCaptureEnabled()) {
+                    try {
+                        startActivityForResult(camera, REQ_FILE);
+                        return true;
+                    } catch (Exception e) {
+                        // no camera app: fall through to the picker
+                    }
                 }
+                Intent pick = new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
+                Intent go = Intent.createChooser(pick, "Receipt photo");
+                go.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
                 try {
                     startActivityForResult(go, REQ_FILE);
                 } catch (ActivityNotFoundException e) {
@@ -132,7 +135,6 @@ public class MainActivity extends Activity {
 
     private Intent cameraIntent() {
         Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (i.resolveActivity(getPackageManager()) == null) return null;
         File dir = new File(getCacheDir(), "camera");
         dir.mkdirs();
         cameraUri = FilesProvider.uri(this, "camera/receipt-" + System.currentTimeMillis() + ".jpg");
@@ -222,6 +224,48 @@ public class MainActivity extends Activity {
                 return true;
             } catch (Exception e) {
                 return false;
+            }
+        }
+
+        /** Opens WhatsApp (or WhatsApp Business) with the PDF attached; falls back to the share menu. */
+        @JavascriptInterface
+        public void shareWhatsApp(String base64, String name, final String mime) {
+            final Uri uri = writeShare(base64, name);
+            if (uri == null) return;
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    for (String pkg : new String[]{"com.whatsapp", "com.whatsapp.w4b"}) {
+                        Intent send = new Intent(Intent.ACTION_SEND).setType(mime).setPackage(pkg)
+                                .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        try {
+                            startActivity(send);
+                            return;
+                        } catch (ActivityNotFoundException ignored) {
+                        }
+                    }
+                    Toast.makeText(MainActivity.this, "WhatsApp isn't installed. Choose another app.", Toast.LENGTH_LONG).show();
+                    startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType(mime)
+                            .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share claim"));
+                }
+            });
+        }
+
+        private Uri writeShare(String base64, String name) {
+            try {
+                File dir = new File(getCacheDir(), "share");
+                dir.mkdirs();
+                File f = new File(dir, name);
+                FileOutputStream os = new FileOutputStream(f);
+                os.write(Base64.decode(base64, Base64.DEFAULT));
+                os.close();
+                return FilesProvider.uri(MainActivity.this, "share/" + name);
+            } catch (Exception e) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        Toast.makeText(MainActivity.this, "Couldn't prepare the file.", Toast.LENGTH_LONG).show();
+                    }
+                });
+                return null;
             }
         }
 

@@ -174,7 +174,7 @@
         doc.addImage(window.EZ_LOGO, "PNG", 105 - 25, 9, 50, 50 * 134 / 308);
       } catch (e) {}
     }
-    stamp(doc, claim, labels);
+    if (["approved", "paid", "returned", "rejected"].indexOf(claim.status) >= 0) stamp(doc, claim, labels);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
     doc.setTextColor(RED[0], RED[1], RED[2]);

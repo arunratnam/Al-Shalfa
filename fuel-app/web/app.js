@@ -3,6 +3,7 @@
   "use strict";
 
   var S = window.EZStore, C = window.EZ_CONFIG, P = window.EZPdf;
+  var LOCAL = S.mode === "local"; // one driver per phone, no server
   var $main, $nav;
   var st = {
     user: null, ready: false, mine: [], all: [], users: [], allError: null,
@@ -80,6 +81,7 @@
     fuel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16M3 21h13M15 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3M7 7h5v4H7z"/></svg>',
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="4"/></svg>',
     pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
+    whatsapp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>',
     share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>'
   };
 
@@ -130,7 +132,8 @@
   function shareFile(blob, filename, title) {
     if (window.EZAndroid && window.EZAndroid.shareFile) {
       return blobToBase64(blob).then(function (b64) {
-        window.EZAndroid.shareFile(b64, filename, blob.type);
+        if (window.EZAndroid.shareWhatsApp) window.EZAndroid.shareWhatsApp(b64, filename, blob.type);
+        else window.EZAndroid.shareFile(b64, filename, blob.type);
       });
     }
     var file;
@@ -325,7 +328,7 @@
     }
     top.hidden = false;
     top.innerHTML = '<img class="logo" src="img/logo.png" alt="EZ Storage">' +
-      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(S.ROLE_LABELS[st.user.role] || "") + "</span></div>" +
+      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(LOCAL ? st.user.vehicle : S.ROLE_LABELS[st.user.role] || "") + "</span></div>" +
       '<a class="avatar" href="#/profile" aria-label="Your profile">' + esc(initials(st.user.name)) + "</a>";
   }
 
@@ -389,6 +392,7 @@
   }
 
   function viewHome() {
+    if (LOCAL) return viewHomeLocal();
     var mine = st.mine, now = new Date(), month = now.toISOString().slice(0, 7);
     var waiting = mine.filter(function (c) { return c.status === "submitted" || c.status === "verified"; });
     var toPay = mine.filter(function (c) { return c.status === "approved"; });
@@ -423,6 +427,34 @@
     h += recent.length ? '<div class="card flush list">' + recent.map(function (c) { return claimItem(c); }).join("") + "</div>"
       : '<div class="card empty"><b>No claims yet</b>Tap "New fuel claim" to submit your first receipts.</div>';
     return h;
+  }
+
+  function viewHomeLocal() {
+    var mine = st.mine, now = new Date(), month = now.toISOString().slice(0, 7), yr = String(now.getFullYear());
+    var waiting = mine.filter(function (c) { return c.status === "submitted"; });
+    var paidMonth = mine.filter(function (c) { return c.status === "paid" && c.paidAt && new Date(c.paidAt).toISOString().slice(0, 7) === month; });
+    var year = mine.filter(function (c) { return c.status !== "draft" && monthKey(c).slice(0, 4) === yr; });
+    var drafts = mine.filter(function (c) { return c.status === "draft"; });
+    var first = (st.user.name || "").split(" ")[0];
+    var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>";
+    h += '<a class="cta" href="#/new"><span class="ic">' + ICON.fuel + "</span><span><b>New fuel claim</b><span>Add receipts, sign, then send the PDF on WhatsApp</span></span></a>";
+    h += '<div class="section-title"><h2>My reimbursements</h2></div><div class="kpis">' +
+      kpi("Waiting for payment", kd(sum(waiting)), "KD", plural(waiting.length, "claim"), waiting.length > 0) +
+      kpi("Paid this month", kd(sum(paidMonth, paidAmt)), "KD", plural(paidMonth.length, "claim")) +
+      kpi("Claimed this year", kd(sum(year)), "KD", plural(year.length, "claim")) +
+      kpi("Fuel this year", lit(sum(year, function (c) { return c.totals ? c.totals.litres : 0; })), "L", plural(sum(year, function (c) { return c.totals ? c.totals.count : 0; }), "receipt")) + "</div>";
+    if (drafts.length) {
+      h += '<div class="section-title"><h2>Not finished yet</h2></div><div class="card flush list">' + drafts.map(function (c) { return claimItem(c); }).join("") + "</div>";
+    }
+    var recent = mine.filter(function (c) { return c.status !== "draft"; }).slice(0, 5);
+    h += '<div class="section-title"><h2>Recent claims</h2><a href="#/claims">See all</a></div>';
+    h += recent.length ? '<div class="card flush list">' + recent.map(function (c) { return claimItem(c); }).join("") + "</div>"
+      : '<div class="card empty"><b>No claims yet</b>Tap "New fuel claim" to add your first receipts.</div>';
+    return h;
+  }
+
+  function paidAmt(c) {
+    return c.paidAmount !== undefined && c.paidAmount !== null && !isNaN(c.paidAmount) ? Number(c.paidAmount) : amountOf(c);
   }
 
   // ------------------------------------------------------------------ my claims
@@ -502,6 +534,7 @@
   }
 
   function viewClaim(id, staffView) {
+    if (LOCAL) return viewClaimLocal(id);
     var c = findClaim(id);
     if (!c) return '<div class="card empty"><b>Claim not found</b>It may have been deleted. <a href="#/home">Go home</a></div>';
     var u = st.user, eff = efficiency(c.receipts || []);
@@ -549,6 +582,79 @@
       h += '<div style="margin-top:18px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete draft</button></div>';
     }
     return h;
+  }
+
+  function viewClaimLocal(id) {
+    var c = findClaim(id);
+    if (!c) return '<div class="card empty"><b>Claim not found</b>It may have been deleted. <a href="#/home">Go home</a></div>';
+    var eff = efficiency(c.receipts || []);
+    var h = '<div class="spread" style="margin-bottom:4px"><h1>' + esc(c.claimNo || "Draft claim") + "</h1>" + statusChip(c.status) + "</div>" +
+      '<p class="sub">' + esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + esc(c.vehicle || "") + "</p>";
+    if (st.justFinished === c.id) {
+      h += '<div class="banner good" style="margin-bottom:14px"><b>Claim finished ✓</b> Now send the PDF to the office on WhatsApp.</div>';
+    } else if (c.status === "submitted") {
+      h += '<div class="banner info" style="margin-bottom:14px">Send the PDF to the office. When the money arrives, tap <b>Mark as paid</b>.</div>';
+    } else if (c.status === "paid") {
+      h += '<div class="banner good" style="margin-bottom:14px"><b>Paid ' + kd(paidAmt(c)) + " KD</b> on " + esc(fmtDate(new Date(c.paidAt).toISOString())) + (c.paidRef ? " · Ref. " + esc(c.paidRef) : "") + "</div>";
+    }
+    var acts = [];
+    if (c.status === "draft") {
+      acts.push('<a class="btn primary" href="#/edit/' + esc(c.id) + '">Continue claim</a>');
+    } else {
+      acts.push('<button class="btn primary" data-act="share" data-id="' + esc(c.id) + '">' + (canShare() ? ICON.whatsapp + "Share on WhatsApp" : ICON.share + "Share PDF") + "</button>");
+      acts.push('<button class="btn" data-act="pdf" data-id="' + esc(c.id) + '">' + ICON.pdf + "Download PDF</button>");
+      if (c.status === "submitted") {
+        acts.push('<button class="btn good" data-act="mark-paid" data-id="' + esc(c.id) + '">Mark as paid</button>');
+        acts.push('<a class="btn" href="#/edit/' + esc(c.id) + '">Edit claim</a>');
+      } else if (c.status === "paid") {
+        acts.push('<button class="btn" data-act="reopen" data-id="' + esc(c.id) + '">Not paid yet</button>');
+      }
+    }
+    h += '<div class="btn-row" style="margin-bottom:6px">' + acts.join("") + "</div>";
+    h += '<div class="section-title"><h2>Details</h2></div><div class="card"><div class="kv">' +
+      kvp("Driver", c.driverName) + kvp("Employee ID", c.employeeId) + kvp("Department", c.department) + kvp("Vehicle number", c.vehicle) +
+      kvp("Period", fmtDate(c.periodFrom) + " – " + fmtDate(c.periodTo)) + kvp("Submission date", c.status === "draft" ? "Not finished" : fmtDate(c.submissionDate)) +
+      (eff ? kvp("Distance", eff.km.toLocaleString() + " km") + kvp("Fuel economy", eff.kmpl.toFixed(1) + " km/L") : "") +
+      (c.status === "paid" ? kvp("Amount paid", kd(paidAmt(c)) + " KD") : "") + "</div></div>";
+    h += '<div class="section-title"><h2>Fuel receipts</h2></div>' + receiptsBlock(c, false) + '<div style="height:10px"></div>' + totalsBar(c);
+    if (c.driverSignature) {
+      h += '<div class="section-title"><h2>Your signature</h2></div><div class="card"><img class="sig-img" alt="Driver signature" src="' + esc(c.driverSignature) + '"></div>';
+    }
+    if (c.status !== "paid") {
+      h += '<div style="margin-top:22px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete claim</button></div>';
+    }
+    return h;
+  }
+
+  function markPaid(id) {
+    var c = findClaim(id);
+    if (!c) return;
+    var h = '<h2>Mark as paid</h2><p class="sub" style="margin-top:-6px">' + esc(c.claimNo) + " · " + kd(c.totals.amount) + ' KD claimed</p><div class="stack">' +
+      '<div class="grid2"><div class="field"><label for="p-amount">Amount received (KD)</label><input id="p-amount" type="number" step="0.001" min="0" inputmode="decimal" value="' + kd(c.totals.amount) + '"></div>' +
+      '<div class="field"><label for="p-date">Date paid</label><input id="p-date" type="date" value="' + today() + '" max="' + today() + '"></div></div>' +
+      '<div class="field"><label for="p-ref">Reference (optional)</label><input id="p-ref" placeholder="e.g. salary, cash voucher number"></div>' +
+      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn good" id="p-go">Mark as paid</button></div></div>';
+    sheet(h, function (el, close) {
+      el.querySelector("#p-go").onclick = function () {
+        var amt = parseFloat(el.querySelector("#p-amount").value), d = el.querySelector("#p-date").value || today();
+        if (isNaN(amt) || amt < 0) { toast("Enter the amount you received."); return; }
+        S.act(c, "markPaid", { amount: Math.round(amt * 1000) / 1000, paidAt: new Date(d + "T12:00:00").getTime(), reference: el.querySelector("#p-ref").value.trim() })
+          .then(function () { close(); toast("Marked as paid"); })
+          .catch(function (e) { toast(e.message); });
+      };
+    });
+  }
+
+  function viewSetup() {
+    return '<div class="login"><div class="box"><div class="brand"><img src="img/logo.png" alt="EZ Storage">' +
+      '<h1>Fuel Expense Claims</h1><p class="sub" style="margin:4px 0 0">Add your fuel receipts, sign, and send the claim PDF to the office on WhatsApp.</p></div>' +
+      '<form id="setup-form" class="card stack" novalidate><div class="eyebrow">Your details (once)</div>' +
+      field("name", "Full name", "text", "", 'autocomplete="name" required') +
+      '<div class="grid2">' + field("employeeId", "Employee ID", "text", "", "required") + selectField("department", "Department", C.departments, "") + "</div>" +
+      field("vehicle", "Vehicle number", "text", "", 'placeholder="e.g. KWT 12-34567" required') +
+      '<div id="setup-msg" class="banner bad" hidden></div>' +
+      '<button class="btn primary block" type="submit">Start</button>' +
+      '<p class="sub" style="margin:0;font-size:12.5px">These go on every claim form. You can change them later in Profile. Your claims are saved on this phone only.</p></form></div></div>';
   }
 
   function kvp(k, v) {
@@ -677,7 +783,7 @@
         '<div class="field"><label>Driver signature</label>' + (d.driverSignature ? '<img class="sig-img" alt="Your signature" src="' + esc(d.driverSignature) + '"><button type="button" class="link" data-act="resign">Sign again</button>' :
           '<div class="sig" id="d-sig"><canvas></canvas><div class="base"></div><div class="ph">Sign here with your finger</div></div><button type="button" class="link" data-act="sig-clear">Clear signature</button>') + "</div></div>" +
         '<div id="submit-msg" class="banner bad" style="margin-top:14px" hidden></div>' +
-        '<div class="sticky-actions"><button class="btn" data-act="step" data-to="2">Back</button><button class="btn primary" data-act="submit-claim">Submit claim</button></div>';
+        '<div class="sticky-actions"><button class="btn" data-act="step" data-to="2">Back</button><button class="btn primary" data-act="submit-claim">' + (LOCAL ? (d.status === "submitted" ? "Save changes" : "Finish claim") : "Submit claim") + "</button></div>";
     }
     return h;
   }
@@ -810,16 +916,18 @@
     var btn = document.querySelector('[data-act="submit-claim"]');
     btn.disabled = true;
     btn.textContent = "Submitting…";
-    d.submissionDate = today();
+    var already = d.status === "submitted";
+    if (!already) d.submissionDate = today();
     persistDraft(true).then(function (saved) {
-      return S.act(saved, "submit", {});
+      return already ? saved : S.act(saved, "submit", {});
     }).then(function (c) {
       st.draft = null;
-      toast("Claim submitted for approval");
+      st.justFinished = LOCAL ? c.id : null;
+      toast(LOCAL ? (already ? "Claim updated" : "Claim finished") : "Claim submitted for approval");
       go("#/claim/" + c.id);
     }).catch(function (e) {
       btn.disabled = false;
-      btn.textContent = "Submit claim";
+      btn.textContent = LOCAL ? "Finish claim" : "Submit claim";
       toast(e.message);
     });
   }
@@ -976,7 +1084,7 @@
 
   function viewProfile() {
     var u = st.user;
-    var h = '<h1>Profile</h1><p class="sub">' + esc(u.email || "") + " · " + esc(S.ROLE_LABELS[u.role]) + "</p>" +
+    var h = '<h1>Profile</h1><p class="sub">' + (LOCAL ? "These details go on every claim form." : esc(u.email || "") + " · " + esc(S.ROLE_LABELS[u.role])) + "</p>" +
       '<form id="profile-form" class="card stack">' + field("name", "Full name", "text", u.name, "required") +
       '<div class="grid2">' + field("employeeId", "Employee ID", "text", u.employeeId || "", "") + selectField("department", "Department", C.departments, u.department || "") + "</div>" +
       field("vehicle", "Vehicle number", "text", u.vehicle || "", 'placeholder="e.g. KWT 12-34567"') +
@@ -986,9 +1094,9 @@
       "<div><b>Android:</b> install the EZ Fuel app, or in Chrome tap ⋮ → <b>Add to Home screen</b>.</div></div>" +
       '<div class="section-title"><h2>Appearance</h2></div><div class="chips">' +
       ["system", "light", "dark"].map(function (t) { return '<button class="chip' + ((localStorage.getItem("ezfuel-theme") || "system") === t ? " on" : "") + '" data-act="theme" data-v="' + t + '">' + t[0].toUpperCase() + t.slice(1) + "</button>"; }).join("") + "</div>" +
-      '<div style="margin-top:24px" class="stack"><button class="btn block" data-act="signout">Sign out</button>' +
-      (S.mode === "demo" ? '<button class="btn block warn" data-act="reset-demo">Reset demo data</button>' : "") + "</div>" +
-      '<p class="sub" style="text-align:center;margin-top:20px;font-size:12px">' + esc(C.docNo) + " · v" + esc(C.docVersion) + " · " + (S.mode === "demo" ? "Demo mode" : "Connected") + "</p>";
+      (LOCAL ? '<div class="banner info" style="margin-top:24px">Your claims and receipt photos are saved on this phone only. Uninstalling the app or clearing its data deletes them, so keep the PDFs you send on WhatsApp.</div>'
+        : '<div style="margin-top:24px" class="stack"><button class="btn block" data-act="signout">Sign out</button></div>') +
+      '<p class="sub" style="text-align:center;margin-top:20px;font-size:12px">Form ' + esc(C.docNo) + " · Version " + esc(C.docVersion) + "</p>";
     return h;
   }
 
@@ -1009,10 +1117,10 @@
     }
     if (!st.user) {
       document.getElementById("demo").hidden = true;
-      $main.innerHTML = viewLogin();
+      $main.innerHTML = LOCAL ? viewSetup() : viewLogin();
       return;
     }
-    document.getElementById("demo").hidden = S.mode !== "demo";
+    document.getElementById("demo").hidden = true;
     if (st.user.active === false) {
       $main.innerHTML = '<div class="card empty"><b>Your account is turned off</b>Ask an administrator to re-activate it.<div style="margin-top:14px"><button class="btn" data-act="signout">Sign out</button></div></div>';
       return;
@@ -1076,6 +1184,10 @@
         }).catch(function (x) { el.disabled = false; toast("Couldn't make the PDF: " + x.message); });
         break;
       case "do": doAction(el.getAttribute("data-id"), el.getAttribute("data-a")); break;
+      case "mark-paid": markPaid(el.getAttribute("data-id")); break;
+      case "reopen":
+        S.act(findClaim(el.getAttribute("data-id")), "reopen", {}).then(function () { toast("Marked as not paid"); });
+        break;
       case "view-photo":
         var pid = el.getAttribute("data-photo");
         if (!pid) break;
@@ -1091,8 +1203,8 @@
         break;
       case "delete-claim":
         var dc = findClaim(el.getAttribute("data-id"));
-        sheet("<h2>Delete this draft?</h2><p class=\"sub\">" + esc(dc.claimNo) + " and its receipts will be removed.</p><div class=\"btn-row\"><button class=\"btn\" data-close>Keep it</button><button class=\"btn bad\" id=\"del-go\">Delete</button></div>", function (s, close) {
-          s.querySelector("#del-go").onclick = function () { S.deleteClaim(dc.id).then(function () { close(); toast("Draft deleted"); go("#/claims"); }); };
+        sheet("<h2>Delete this claim?</h2><p class=\"sub\">" + esc(dc.claimNo) + " and its receipt photos will be removed from this phone.</p><div class=\"btn-row\"><button class=\"btn\" data-close>Keep it</button><button class=\"btn bad\" id=\"del-go\">Delete</button></div>", function (s, close) {
+          s.querySelector("#del-go").onclick = function () { S.deleteClaim(dc.id).then(function () { close(); toast("Claim deleted"); go("#/claims"); }); };
         });
         break;
       // form
@@ -1152,6 +1264,21 @@
   document.addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
+    if (f.id === "setup-form") {
+      var sv = {};
+      new FormData(f).forEach(function (val, k) { sv[k] = String(val).trim(); });
+      var miss = ["name", "employeeId", "department", "vehicle"].filter(function (k) { return !sv[k]; });
+      f.querySelectorAll(".field").forEach(function (x) { x.classList.toggle("err", miss.indexOf(x.getAttribute("data-f")) >= 0); });
+      if (miss.length) {
+        var sm = document.getElementById("setup-msg");
+        sm.hidden = false;
+        sm.textContent = "Please fill in all four details.";
+        return;
+      }
+      S.createProfile(sv);
+      location.hash = "#/home";
+      return;
+    }
     if (f.id === "auth-form") {
       var v = {};
       new FormData(f).forEach(function (val, k) { v[k] = String(val).trim(); });
@@ -1175,6 +1302,7 @@
   window.addEventListener("hashchange", function () {
     var page = (location.hash || "").slice(2).split("/")[0];
     if (page !== "new" && page !== "edit") st.draft = null;
+    if (page !== "claim") st.justFinished = null;
     route();
   });
 
