@@ -1,6 +1,8 @@
 package com.ezstorage.fuel;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -18,6 +20,7 @@ import android.view.WindowInsetsController;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -28,7 +31,9 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -56,12 +61,20 @@ public class MainActivity extends Activity {
         FrameLayout root = new FrameLayout(this);
         // the strip behind the status and navigation bars matches the app's top bar
         root.setBackgroundColor(night ? Color.rgb(23, 26, 31) : Color.WHITE);
-        setupSystemBars(night);
         // Android 15+ always draws the app edge to edge: pad the page clear of the system bars,
         // the camera cut-out and the keyboard.
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @SuppressWarnings("deprecation")
             public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
+                try {
+                    return applyInsets(v, in);
+                } catch (Throwable t) {
+                    return in;
+                }
+            }
+
+            @SuppressWarnings("deprecation")
+            private WindowInsets applyInsets(View v, WindowInsets in) {
                 if (Build.VERSION.SDK_INT >= 30) {
                     android.graphics.Insets i = in.getInsets(WindowInsets.Type.systemBars()
                             | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
@@ -76,6 +89,11 @@ public class MainActivity extends Activity {
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
+        try {
+            setupSystemBars(night);
+        } catch (Throwable ignored) {
+            // cosmetic only
+        }
 
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -105,7 +123,23 @@ public class MainActivity extends Activity {
 
             @Override
             public void doUpdateVisitedHistory(WebView v, String url, boolean reload) {
-                updateBack();
+                try {
+                    updateBack();
+                } catch (Throwable ignored) {
+                    // onBackPressed still works as a fallback
+                }
+            }
+
+            /** If Android stops the page's renderer (for example low memory), restart the screen instead of crashing. */
+            @Override
+            public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail detail) {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        Toast.makeText(MainActivity.this, "EZ Fuel ran out of memory and restarted the screen. Your saved bills are safe.", Toast.LENGTH_LONG).show();
+                        recreate();
+                    }
+                });
+                return true;
             }
 
             @Override
@@ -150,6 +184,39 @@ public class MainActivity extends Activity {
 
         if (b != null) web.restoreState(b);
         else web.loadUrl(START);
+        showLastCrash();
+    }
+
+    /** After a crash, offer to send the saved error details (e.g. on WhatsApp) so it can be fixed. */
+    private void showLastCrash() {
+        final File f = App.crashFile(this);
+        if (!f.exists()) return;
+        final StringBuilder sb = new StringBuilder();
+        try {
+            BufferedReader r = new BufferedReader(new FileReader(f));
+            String line;
+            int n = 0;
+            while ((line = r.readLine()) != null && n++ < 60) sb.append(line).append('\n');
+            r.close();
+        } catch (Exception ignored) {
+        }
+        f.delete();
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle("EZ Fuel closed unexpectedly")
+                    .setMessage("Sorry about that. Your bills are safe. Send the error report so it can be fixed?")
+                    .setPositiveButton("Send report", new DialogInterface.OnClickListener() {
+                        public void onClick(DialogInterface d, int w) {
+                            Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain")
+                                    .putExtra(Intent.EXTRA_SUBJECT, "EZ Fuel crash report")
+                                    .putExtra(Intent.EXTRA_TEXT, sb.toString());
+                            startActivity(Intent.createChooser(send, "Send report"));
+                        }
+                    })
+                    .setNegativeButton("Not now", null)
+                    .show();
+        } catch (Exception ignored) {
+        }
     }
 
     private Intent cameraIntent() {
@@ -158,6 +225,8 @@ public class MainActivity extends Activity {
         dir.mkdirs();
         cameraUri = FilesProvider.uri(this, "camera/receipt-" + System.currentTimeMillis() + ".jpg");
         i.putExtra(MediaStore.EXTRA_OUTPUT, cameraUri);
+        // ClipData carries the write permission through the photo chooser to the camera app
+        i.setClipData(android.content.ClipData.newRawUri("", cameraUri));
         i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         return i;
     }
