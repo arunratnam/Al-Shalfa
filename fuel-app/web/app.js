@@ -94,6 +94,21 @@
   }
 
   function saveFile(blob, filename) {
+    // Inside a Claude artifact, files are saved through the viewer.
+    if (window.claude && window.claude.use) {
+      return window.claude.use("downloads").then(function (d) {
+        if (!d) return anchorSave(blob, filename);
+        return d.save({ filename: filename, data: blob }).then(function () {
+          toast("Saved " + filename);
+        }).catch(function (e) {
+          toast(e && e.code === "declined" ? "Download cancelled" : "Couldn't save the file here. Open the app in a browser to download.");
+        });
+      });
+    }
+    return anchorSave(blob, filename);
+  }
+
+  function anchorSave(blob, filename) {
     if (window.EZAndroid && window.EZAndroid.saveFile) {
       return blobToBase64(blob).then(function (b64) {
         var ok = window.EZAndroid.saveFile(b64, filename, blob.type || "application/octet-stream");
@@ -128,6 +143,7 @@
 
   function canShare() {
     if (window.EZAndroid && window.EZAndroid.shareFile) return true;
+    if (window.claude) return false; // sharing is blocked inside an artifact
     try {
       return !!(navigator.canShare && navigator.canShare({ files: [new File(["x"], "x.pdf", { type: "application/pdf" })] }));
     } catch (e) {
