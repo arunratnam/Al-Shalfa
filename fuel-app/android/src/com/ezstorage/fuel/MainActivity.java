@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -13,6 +14,9 @@ import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -42,23 +46,33 @@ public class MainActivity extends Activity {
     private WebView web;
     private ValueCallback<Uri[]> pendingFiles;
     private Uri cameraUri;
+    private Object backCallback;   // OnBackInvokedCallback on Android 13+
+    private boolean backRegistered;
 
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.WHITE);
-        root.setFitsSystemWindows(true);
-        if (Build.VERSION.SDK_INT >= 20) {
-            // keep the page clear of the status and navigation bars (Android 15+ draws edge to edge)
-            root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
-                public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
-                    v.setPadding(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(),
-                            in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
-                    return in;
+        // the strip behind the status and navigation bars matches the app's top bar
+        root.setBackgroundColor(night ? Color.rgb(23, 26, 31) : Color.WHITE);
+        setupSystemBars(night);
+        // Android 15+ always draws the app edge to edge: pad the page clear of the system bars,
+        // the camera cut-out and the keyboard.
+        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @SuppressWarnings("deprecation")
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
+                if (Build.VERSION.SDK_INT >= 30) {
+                    android.graphics.Insets i = in.getInsets(WindowInsets.Type.systemBars()
+                            | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                    v.setPadding(i.left, i.top, i.right, i.bottom);
+                    return WindowInsets.CONSUMED;
                 }
-            });
-        }
+                v.setPadding(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(),
+                        in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
+                return in.consumeSystemWindowInsets();
+            }
+        });
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
@@ -87,6 +101,11 @@ public class MainActivity extends Activity {
                 } catch (Exception e) {
                     return new WebResourceResponse("text/plain", "utf-8", 404, "Not found", null, null);
                 }
+            }
+
+            @Override
+            public void doUpdateVisitedHistory(WebView v, String url, boolean reload) {
+                updateBack();
             }
 
             @Override
@@ -165,11 +184,56 @@ public class MainActivity extends Activity {
         web.saveState(out);
     }
 
+    /**
+     * Back goes to the previous screen of the app. On Android 13+ this uses the predictive back
+     * callback (Android 16 no longer calls onBackPressed); the callback is only registered while there
+     * is a page to go back to, so the system's back-to-home animation still works on the first screen.
+     */
+    private void updateBack() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        boolean want = web.canGoBack();
+        OnBackInvokedDispatcher d = getOnBackInvokedDispatcher();
+        if (backCallback == null) {
+            backCallback = new OnBackInvokedCallback() {
+                public void onBackInvoked() {
+                    if (web.canGoBack()) web.goBack();
+                    updateBack();
+                }
+            };
+        }
+        if (want && !backRegistered) {
+            d.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, (OnBackInvokedCallback) backCallback);
+            backRegistered = true;
+        } else if (!want && backRegistered) {
+            d.unregisterOnBackInvokedCallback((OnBackInvokedCallback) backCallback);
+            backRegistered = false;
+        }
+    }
+
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
+        // Android 12 and older
         if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
+    }
+
+    /** Dark status-bar icons on the light theme, light icons on the dark theme. */
+    @SuppressWarnings("deprecation")
+    private void setupSystemBars(boolean night) {
+        android.view.Window w = getWindow();
+        if (Build.VERSION.SDK_INT < 35) {
+            w.setStatusBarColor(night ? Color.rgb(23, 26, 31) : Color.WHITE);
+            w.setNavigationBarColor(night ? Color.rgb(23, 26, 31) : Color.WHITE);
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            int light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            w.getInsetsController().setSystemBarsAppearance(night ? 0 : light, light);
+        } else if (Build.VERSION.SDK_INT >= 23 && !night) {
+            int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            w.getDecorView().setSystemUiVisibility(flags);
+        }
     }
 
     static String mime(String path) {

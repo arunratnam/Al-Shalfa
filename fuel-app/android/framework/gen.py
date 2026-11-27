@@ -79,7 +79,7 @@ ATTRS = {
     "resizeMode": (None, None, {"none": 0, "horizontal": 1, "vertical": 2}),
     "widgetCategory": (None, None, {"home_screen": 1, "keyguard": 2, "searchbox": 4}),
 }
-STYLES = ["Theme.Material.NoActionBar", "Theme.Translucent.NoTitleBar"]
+STYLES = ["Theme.Material.NoActionBar", "Theme.Material.Light.NoActionBar", "Theme.Translucent.NoTitleBar"]
 
 
 def constants(jar, cls):

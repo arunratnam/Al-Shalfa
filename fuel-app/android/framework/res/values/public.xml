@@ -57,5 +57,6 @@
     <public type="attr" name="resizeMode" id="0x01010363" />
     <public type="attr" name="widgetCategory" id="0x010103c4" />
     <public type="style" name="Theme.Material.NoActionBar" id="0x0103022e" />
+    <public type="style" name="Theme.Material.Light.NoActionBar" id="0x01030241" />
     <public type="style" name="Theme.Translucent.NoTitleBar" id="0x01030010" />
 </resources>
