@@ -8,7 +8,7 @@
   var st = {
     user: null, ready: false, mine: [], all: [], users: [], allError: null,
     unsub: [], filter: { status: "all", month: "all", driver: "all", q: "" }, officeTab: "queue",
-    draft: null, step: 1, photoCache: {}, loginTab: "in"
+    draft: null, step: 1, photoCache: {}, loginTab: "in", bills: []
   };
 
   // ------------------------------------------------------------------ helpers
@@ -310,13 +310,20 @@
     }
     $nav.hidden = false;
     var r = (location.hash || "#/home").split("/")[1] || "home";
-    var items = [["home", "Home", ICON.home], ["claims", "My claims", ICON.list], ["new", "New claim", '<span class="plus">' + ICON.plus + "</span>"]];
-    if (isStaff()) items.push(["office", "Office", ICON.office]);
-    if (st.user.role === "admin") items.push(["users", "Staff", ICON.users]);
-    items.push(["profile", "Profile", ICON.user]);
+    var items;
+    if (LOCAL) {
+      items = [["home", "Home", ICON.home], ["bills", "Bills", ICON.fuel], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
+        ["claims", "Claims", ICON.list], ["reports", "Monthly", ICON.office]];
+    } else {
+      items = [["home", "Home", ICON.home], ["claims", "My claims", ICON.list], ["new", "New claim", '<span class="plus">' + ICON.plus + "</span>"]];
+      if (isStaff()) items.push(["office", "Office", ICON.office]);
+      if (st.user.role === "admin") items.push(["users", "Staff", ICON.users]);
+      items.push(["profile", "Profile", ICON.user]);
+    }
     $nav.innerHTML = items.map(function (it) {
       var on = r === it[0] || (it[0] === "claims" && r === "claim") || (it[0] === "office" && r === "review");
-      return '<a href="#/' + it[0] + '" class="' + (on ? "on " : "") + (it[0] === "new" ? "new" : "") + '">' + it[2] + "<span>" + it[1] + "</span></a>";
+      if (it[0] === "claims" && r === "make-claim") on = true;
+      return '<a href="#/' + it[0] + '" class="' + (on ? "on " : "") + (it[0] === "new" || it[0] === "add" ? "new" : "") + '">' + it[2] + "<span>" + it[1] + "</span></a>";
     }).join("");
   }
 
@@ -387,7 +394,7 @@
     var who = staffView ? esc(c.driverName) + " · " : "";
     var t = c.totals || { count: 0, amount: 0 };
     return '<a class="item" href="#/' + (staffView ? "review" : "claim") + "/" + esc(c.id) + '"><div class="main"><b>' + who + esc(c.claimNo || "Draft claim") + "</b><span>" +
-      esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + t.count + (t.count === 1 ? " receipt" : " receipts") +
+      esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + plural(t.count, LOCAL ? "bill" : "receipt") +
       (c.sample ? " · Example" : "") + '</span></div><div class="side"><span class="amt">' + kd(amountOf(c)) + ' KD</span>' + statusChip(c.status) + "</div></a>";
   }
 
@@ -430,26 +437,39 @@
   }
 
   function viewHomeLocal() {
-    var mine = st.mine, now = new Date(), month = now.toISOString().slice(0, 7), yr = String(now.getFullYear());
+    var mine = st.mine, now = new Date(), month = monthOf(today());
     var waiting = mine.filter(function (c) { return c.status === "submitted"; });
-    var paidMonth = mine.filter(function (c) { return c.status === "paid" && c.paidAt && new Date(c.paidAt).toISOString().slice(0, 7) === month; });
-    var year = mine.filter(function (c) { return c.status !== "draft" && monthKey(c).slice(0, 4) === yr; });
-    var drafts = mine.filter(function (c) { return c.status === "draft"; });
+    var paidMonth = mine.filter(function (c) { return c.status === "paid" && c.paidAt && monthOf(new Date(c.paidAt).toISOString()) === month; });
+    var all = billsWithMileage(), open = all.filter(function (b) { return !b.claimId; });
+    var thisMonth = all.filter(function (b) { return monthOf(b.date) === month; });
     var first = (st.user.name || "").split(" ")[0];
+    var n = open.length, need = CLAIM_SIZE;
     var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>";
-    h += '<a class="cta" href="#/new"><span class="ic">' + ICON.fuel + "</span><span><b>New fuel claim</b><span>Add receipts, sign, then send the PDF on WhatsApp</span></span></a>";
-    h += '<div class="section-title"><h2>My reimbursements</h2></div><div class="kpis">' +
+
+    // progress towards the next claim
+    var pct = Math.min(100, Math.round(n / need * 100));
+    h += '<div class="card stack progress-card"><div class="spread"><div><div class="eyebrow">Next claim</div><div class="big num">' + Math.min(n, need) + "<small> / " + need + " bills</small></div></div>" +
+      (n >= need ? '<span class="status good">Ready to claim</span>' : '<span class="status muted">' + (need - n) + " more needed</span>") + "</div>" +
+      '<div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="' + need + '" aria-valuenow="' + Math.min(n, need) + '"><span style="width:' + pct + '%"></span></div>' +
+      (n >= need
+        ? '<p class="sub" style="margin:0">' + need + " bills (" + kd(sum(open.slice(0, need), function (b) { return Number(b.amount) || 0; })) + " KD) are ready. Create the claim and send the PDF on WhatsApp.</p>" +
+          '<div class="btn-row"><a class="btn primary" href="#/make-claim">Create claim</a><button class="btn" data-act="add-bill">' + ICON.camera + "Add fuel bill</button></div>"
+        : '<p class="sub" style="margin:0">Add each fuel bill when you fill up. After ' + need + " bills you can make a claim.</p>" +
+          '<button class="btn primary block" data-act="add-bill">' + ICON.camera + "Add fuel bill</button>") + "</div>";
+
+    h += '<div class="section-title"><h2>This month</h2><a href="#/reports/' + month + '">Monthly report</a></div><div class="kpis">' +
+      kpi("Distance driven", sum(thisMonth, function (b) { return b.distance || 0; }).toLocaleString(), "km", plural(thisMonth.length, "bill")) +
+      kpi("Fuel cost", kd(sum(thisMonth, function (b) { return Number(b.amount) || 0; })), "KD", lit(sum(thisMonth, function (b) { return Number(b.litres) || 0; })) + " litres") +
       kpi("Waiting for payment", kd(sum(waiting)), "KD", plural(waiting.length, "claim"), waiting.length > 0) +
-      kpi("Paid this month", kd(sum(paidMonth, paidAmt)), "KD", plural(paidMonth.length, "claim")) +
-      kpi("Claimed this year", kd(sum(year)), "KD", plural(year.length, "claim")) +
-      kpi("Fuel this year", lit(sum(year, function (c) { return c.totals ? c.totals.litres : 0; })), "L", plural(sum(year, function (c) { return c.totals ? c.totals.count : 0; }), "receipt")) + "</div>";
-    if (drafts.length) {
-      h += '<div class="section-title"><h2>Not finished yet</h2></div><div class="card flush list">' + drafts.map(function (c) { return claimItem(c); }).join("") + "</div>";
+      kpi("Paid this month", kd(sum(paidMonth, paidAmt)), "KD", plural(paidMonth.length, "claim")) + "</div>";
+
+    var recent = all.slice().reverse().slice(0, 5);
+    h += '<div class="section-title"><h2>Latest bills</h2><a href="#/bills">See all</a></div>';
+    h += recent.length ? '<div class="card flush">' + recent.map(billRow).join("") + "</div>"
+      : '<div class="card empty"><b>No fuel bills yet</b>Tap "Add fuel bill" after you fill up, and take a photo of the bill.</div>';
+    if (waiting.length) {
+      h += '<div class="section-title"><h2>Waiting for payment</h2></div><div class="card flush list">' + waiting.map(function (c) { return claimItem(c); }).join("") + "</div>";
     }
-    var recent = mine.filter(function (c) { return c.status !== "draft"; }).slice(0, 5);
-    h += '<div class="section-title"><h2>Recent claims</h2><a href="#/claims">See all</a></div>';
-    h += recent.length ? '<div class="card flush list">' + recent.map(function (c) { return claimItem(c); }).join("") + "</div>"
-      : '<div class="card empty"><b>No claims yet</b>Tap "New fuel claim" to add your first receipts.</div>';
     return h;
   }
 
@@ -605,7 +625,7 @@
       acts.push('<button class="btn" data-act="pdf" data-id="' + esc(c.id) + '">' + ICON.pdf + "Download PDF</button>");
       if (c.status === "submitted") {
         acts.push('<button class="btn good" data-act="mark-paid" data-id="' + esc(c.id) + '">Mark as paid</button>');
-        acts.push('<a class="btn" href="#/edit/' + esc(c.id) + '">Edit claim</a>');
+
       } else if (c.status === "paid") {
         acts.push('<button class="btn" data-act="reopen" data-id="' + esc(c.id) + '">Not paid yet</button>');
       }
@@ -621,7 +641,7 @@
       h += '<div class="section-title"><h2>Your signature</h2></div><div class="card"><img class="sig-img" alt="Driver signature" src="' + esc(c.driverSignature) + '"></div>';
     }
     if (c.status !== "paid") {
-      h += '<div style="margin-top:22px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete claim</button></div>';
+      h += '<div style="margin-top:22px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete claim</button><p class="sub" style="font-size:12.5px;margin-top:6px">Deleting the claim puts its bills back in your list.</p></div>';
     }
     return h;
   }
@@ -1089,6 +1109,9 @@
       '<div class="grid2">' + field("employeeId", "Employee ID", "text", u.employeeId || "", "") + selectField("department", "Department", C.departments, u.department || "") + "</div>" +
       field("vehicle", "Vehicle number", "text", u.vehicle || "", 'placeholder="e.g. KWT 12-34567"') +
       '<button class="btn primary" type="submit">Save profile</button></form>' +
+      (LOCAL ? '<div class="section-title"><h2>Signature</h2></div><div class="card spread">' +
+        (u.signature ? '<img class="sig-img" alt="Your saved signature" src="' + esc(u.signature) + '">' : '<span class="sub" style="margin:0">Not set yet. You sign once, on your first claim.</span>') +
+        '<button class="btn small" data-act="change-sig">' + (u.signature ? "Change" : "Add signature") + "</button></div>" : "") +
       '<div class="section-title"><h2>Install on your phone</h2></div><div class="card stack" style="font-size:14px">' +
       "<div><b>iPhone:</b> open this page in Safari → tap Share → <b>Add to Home Screen</b>.</div>" +
       "<div><b>Android:</b> install the EZ Fuel app, or in Chrome tap ⋮ → <b>Add to Home screen</b>.</div></div>" +
@@ -1104,6 +1127,291 @@
     var t = localStorage.getItem("ezfuel-theme") || "system";
     if (t === "system") document.documentElement.removeAttribute("data-theme");
     else document.documentElement.setAttribute("data-theme", t);
+  }
+
+  // ------------------------------------------------------------------ fuel bills (on the phone)
+
+  var CLAIM_SIZE = C.billsPerClaim || 10;
+
+  function monthOf(iso) { return String(iso || "").slice(0, 7); }
+
+  function billOrder(a, b) {
+    return (a.date || "").localeCompare(b.date || "") || (Number(a.odometer) || 0) - (Number(b.odometer) || 0) || (a.createdAt || 0) - (b.createdAt || 0);
+  }
+
+  /** All bills, oldest first, with km since the previous fill-up, km per litre and price per litre. */
+  function billsWithMileage() {
+    var prev = null;
+    return st.bills.slice().sort(billOrder).map(function (b) {
+      var x = {};
+      for (var k in b) x[k] = b[k];
+      var odo = Number(b.odometer), litres = Number(b.litres), amount = Number(b.amount);
+      x.distance = prev && odo > Number(prev.odometer) ? odo - Number(prev.odometer) : null;
+      x.kmpl = x.distance && litres > 0 ? x.distance / litres : null;
+      x.ppl = litres > 0 && amount > 0 ? amount / litres : null;
+      prev = b;
+      return x;
+    });
+  }
+
+  function claimNoOf(id) {
+    var c = st.mine.filter(function (x) { return x.id === id; })[0];
+    return c ? c.claimNo : "";
+  }
+
+  function billRow(b) {
+    var mil = [];
+    if (b.distance) mil.push("+" + b.distance.toLocaleString() + " km");
+    if (b.kmpl) mil.push(b.kmpl.toFixed(1) + " km/L");
+    return '<button class="receipt bill" data-act="open-bill" data-id="' + esc(b.id) + '"><span class="thumb" data-thumb="' + esc(b.photoId || "") + '" data-claim="">' + (b.photoId ? "" : "No photo") + "</span>" +
+      '<span class="main"><b>' + esc(b.station || "—") + "</b><span>" + esc(fmtDate(b.date)) + " · " + (b.odometer ? Number(b.odometer).toLocaleString() + " km" : "") + "</span>" +
+      (mil.length ? '<span class="mil">' + esc(mil.join(" · ")) + "</span>" : "") +
+      '<span class="tag ' + (b.claimId ? "in" : "") + '">' + (b.claimId ? "In " + esc(claimNoOf(b.claimId)) : "Not claimed yet") + "</span></span>" +
+      '<span class="amt">' + kd(b.amount) + " KD<small>" + lit(b.litres) + " L</small></span></button>";
+  }
+
+  function viewBills() {
+    var all = billsWithMileage(), open = all.filter(function (b) { return !b.claimId; }).length;
+    var h = '<div class="spread"><h1>Fuel bills</h1><button class="btn small primary" data-act="add-bill">' + ICON.plus + "Add bill</button></div>" +
+      '<p class="sub">' + plural(all.length, "bill") + " · " + open + " not claimed yet</p>";
+    if (!all.length) return h + '<div class="card empty"><b>No fuel bills yet</b>Tap "Add bill" after you fill up, and take a photo of the bill.</div>';
+    var months = {};
+    all.forEach(function (b) { (months[monthOf(b.date)] = months[monthOf(b.date)] || []).push(b); });
+    Object.keys(months).sort().reverse().forEach(function (m) {
+      var list = months[m];
+      h += '<div class="section-title"><h2>' + esc(monthLabel(m)) + '</h2><a href="#/reports/' + m + '">Report</a></div>' +
+        '<p class="sub" style="margin:-4px 0 8px;font-size:13px">' + plural(list.length, "bill") + " · " + sum(list, function (b) { return b.distance || 0; }).toLocaleString() + " km · " +
+        lit(sum(list, function (b) { return Number(b.litres) || 0; })) + " L · " + kd(sum(list, function (b) { return Number(b.amount) || 0; })) + " KD</p>" +
+        '<div class="card flush">' + list.slice().reverse().map(billRow).join("") + "</div>";
+    });
+    return h;
+  }
+
+  function billSheet(id) {
+    var all = billsWithMileage();
+    var b = id ? all.filter(function (x) { return x.id === id; })[0] : null;
+    if (id && !b) return;
+    var locked = !!(b && b.claimId);
+    var r = b ? { id: b.id, date: b.date, station: b.station, odometer: b.odometer, litres: b.litres, amount: b.amount, photoId: b.photoId, createdAt: b.createdAt, claimId: b.claimId }
+      : { date: today(), station: "", odometer: "", litres: "", amount: "", photoId: "" };
+    var stations = {};
+    all.forEach(function (x) { if (x.station) stations[x.station] = 1; });
+    var newPhoto = null;
+    var dis = locked ? " disabled" : "";
+    var h = "<h2>" + (b ? (locked ? "Fuel bill" : "Edit fuel bill") : "Add fuel bill") + "</h2>" +
+      (locked ? '<div class="banner info" style="margin-bottom:12px">This bill is in claim ' + esc(claimNoOf(b.claimId)) + ", so it can't be changed.</div>" : "") +
+      '<div class="stack"><div class="photo-pick"><span id="r-prev">' + (r.photoId ? '<img alt="Bill photo" id="r-img">' : '<span class="ph">' + ICON.camera + "</span>") + "</span>" +
+      '<div class="grow"><b>Bill photo</b><div style="font-size:12.5px;color:var(--muted)">Lay the bill flat in good light.</div>' +
+      (locked ? "" : '<div class="row" style="margin-top:8px"><label class="btn small primary">' + ICON.camera + 'Take photo<input type="file" accept="image/*" capture="environment" id="r-cam" hidden></label><label class="btn small">Choose<input type="file" accept="image/*" id="r-file" hidden></label></div>') + "</div></div>" +
+      '<div class="grid2">' + field("r-date", "Date", "date", r.date, 'max="' + today() + '"' + dis) + field("r-odo", "Odometer (km)", "number", r.odometer, 'inputmode="numeric" min="0" step="1"' + dis) + "</div>" +
+      '<div class="hint" id="r-odo-hint" style="font-size:12.5px;color:var(--muted);margin-top:-6px"></div>' +
+      '<div class="field" data-f="r-station"><label for="f-r-station">Fuel station</label><input id="f-r-station" list="stations" value="' + esc(r.station) + '" placeholder="e.g. KNPC Salmiya"' + dis + '><datalist id="stations">' +
+      Object.keys(stations).map(function (x) { return '<option value="' + esc(x) + '">'; }).join("") + "</datalist></div>" +
+      '<div class="grid2">' + field("r-litres", "Litres", "number", r.litres, 'inputmode="decimal" min="0" step="0.01"' + dis) + field("r-amount", "Amount (KD)", "number", r.amount, 'inputmode="decimal" min="0" step="0.001"' + dis) + "</div>" +
+      '<div class="calc" id="r-calc"></div><div id="r-msg" class="banner bad" hidden></div>' +
+      '<div class="btn-row">' + (locked ? '<button class="btn" data-close>Close</button>' :
+        (b ? '<button class="btn bad" id="r-del">Delete</button>' : '<button class="btn" data-close>Cancel</button>') + '<button class="btn primary" id="r-save">Save bill</button>') + "</div></div>";
+
+    // previous and next bill around a date (ignoring this bill) for the odometer check
+    function neighbours(date) {
+      var others = all.filter(function (x) { return !b || x.id !== b.id; });
+      var before = others.filter(function (x) { return (x.date || "") <= date; }), after = others.filter(function (x) { return (x.date || "") > date; });
+      return { prev: before[before.length - 1] || null, next: after[0] || null };
+    }
+
+    sheet(h, function (el, close) {
+      if (r.photoId) getPhoto(null, r.photoId).then(function (src) { var i = el.querySelector("#r-img"); if (i && src) i.src = src; });
+      function calc() {
+        var date = el.querySelector("#f-r-date").value, odo = Number(el.querySelector("#f-r-odo").value);
+        var litres = Number(el.querySelector("#f-r-litres").value), amount = Number(el.querySelector("#f-r-amount").value);
+        var nb = neighbours(date), hint = el.querySelector("#r-odo-hint"), out = [];
+        hint.textContent = nb.prev ? "Last bill: " + Number(nb.prev.odometer).toLocaleString() + " km on " + fmtDate(nb.prev.date) : "This is your first bill.";
+        if (nb.prev && odo > Number(nb.prev.odometer)) {
+          var dist = odo - Number(nb.prev.odometer);
+          out.push("<b>" + dist.toLocaleString() + " km</b> since the last bill");
+          if (litres > 0) out.push("<b>" + (dist / litres).toFixed(1) + " km/L</b>");
+        }
+        if (litres > 0 && amount > 0) out.push((amount / litres).toFixed(3) + " KD per litre");
+        el.querySelector("#r-calc").innerHTML = out.join(" · ");
+      }
+      el.addEventListener("input", calc);
+      calc();
+      function onFile(e) {
+        var f = e.target.files && e.target.files[0];
+        if (!f) return;
+        compressImage(f).then(function (data) {
+          newPhoto = data;
+          el.querySelector("#r-prev").innerHTML = '<img alt="Bill photo" src="' + data + '">';
+        }).catch(function (err) { toast(err.message); });
+      }
+      if (!locked) {
+        el.querySelector("#r-cam").onchange = onFile;
+        el.querySelector("#r-file").onchange = onFile;
+      }
+      var del = el.querySelector("#r-del");
+      if (del) del.onclick = function () {
+        S.deleteBill(b.id).then(function () { close(); toast("Bill deleted"); }).catch(function (e) { toast(e.message); });
+      };
+      var save = el.querySelector("#r-save");
+      if (save) save.onclick = function () {
+        var btn = this, m = el.querySelector("#r-msg");
+        r.date = el.querySelector("#f-r-date").value;
+        r.station = el.querySelector("#f-r-station").value.trim();
+        r.odometer = el.querySelector("#f-r-odo").value ? Math.round(Number(el.querySelector("#f-r-odo").value)) : "";
+        r.litres = el.querySelector("#f-r-litres").value ? Math.round(Number(el.querySelector("#f-r-litres").value) * 100) / 100 : "";
+        r.amount = el.querySelector("#f-r-amount").value ? Math.round(Number(el.querySelector("#f-r-amount").value) * 1000) / 1000 : "";
+        var miss = [];
+        if (!newPhoto && !r.photoId) miss.push("bill photo");
+        if (!r.date) miss.push("date");
+        if (!(r.odometer > 0)) miss.push("odometer");
+        if (!r.station) miss.push("fuel station");
+        if (!(r.litres > 0)) miss.push("litres");
+        if (!(r.amount > 0)) miss.push("amount");
+        m.hidden = true;
+        if (miss.length) {
+          m.hidden = false;
+          m.textContent = "Please add the " + miss.join(", ") + ".";
+          return;
+        }
+        if (r.date > today()) { m.hidden = false; m.textContent = "The date can't be in the future."; return; }
+        var nb = neighbours(r.date);
+        if (nb.prev && r.odometer <= Number(nb.prev.odometer)) {
+          m.hidden = false;
+          m.textContent = "The odometer must be higher than your last bill (" + Number(nb.prev.odometer).toLocaleString() + " km on " + fmtDate(nb.prev.date) + "). Check the reading.";
+          return;
+        }
+        if (nb.next && r.odometer >= Number(nb.next.odometer)) {
+          m.hidden = false;
+          m.textContent = "The odometer must be lower than the later bill (" + Number(nb.next.odometer).toLocaleString() + " km on " + fmtDate(nb.next.date) + "). Check the date and reading.";
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = "Saving…";
+        var before = st.bills.filter(function (x) { return !x.claimId; }).length;
+        (newPhoto ? S.savePhoto(null, newPhoto).then(function (pid) { st.photoCache[pid] = newPhoto; r.photoId = pid; }) : Promise.resolve())
+          .then(function () { return S.saveBill(r); })
+          .then(function () {
+            close();
+            var after = before + (b ? 0 : 1);
+            toast(!b && after === CLAIM_SIZE ? CLAIM_SIZE + " bills ready. You can create a claim now." : "Bill saved");
+          })
+          .catch(function (e) {
+            btn.disabled = false;
+            btn.textContent = "Save bill";
+            toast(e.message);
+          });
+      };
+    });
+  }
+
+  // ---- create a claim from 10 bills ----
+
+  function viewMakeClaim() {
+    var open = billsWithMileage().filter(function (b) { return !b.claimId; });
+    if (open.length < CLAIM_SIZE) {
+      return '<h1>Create claim</h1><div class="card empty"><b>' + open.length + " of " + CLAIM_SIZE + " bills</b>A claim needs " + CLAIM_SIZE + " fuel bills. Add " + (CLAIM_SIZE - open.length) + " more.<div style=\"margin-top:14px\"><button class=\"btn primary\" data-act=\"add-bill\">Add fuel bill</button></div></div>";
+    }
+    var chosen = open.slice(0, CLAIM_SIZE), u = st.user;
+    var km = sum(chosen, function (b) { return b.distance || 0; });
+    var litres = sum(chosen, function (b) { return Number(b.litres) || 0; }), amount = sum(chosen, function (b) { return Number(b.amount) || 0; });
+    var h = "<h1>Create claim</h1><p class=\"sub\">Your oldest " + CLAIM_SIZE + " bills, " + esc(fmtDate(chosen[0].date)) + " – " + esc(fmtDate(chosen[chosen.length - 1].date)) + "</p>" +
+      '<div class="card flush totals" style="grid-template-columns:repeat(4,minmax(0,1fr))"><div><span>Bills</span><b>' + chosen.length + "</b></div><div><span>Distance</span><b>" + km.toLocaleString() + " km</b></div><div><span>Litres</span><b>" + lit(litres) + "</b></div><div><span>Total</span><b>" + kd(amount) + " KD</b></div></div>" +
+      '<div class="section-title"><h2>Bills in this claim</h2></div><div class="card flush">' + chosen.map(billRow).join("") + "</div>" +
+      '<div class="card stack" style="margin-top:14px"><div class="eyebrow">Driver declaration</div>' +
+      '<label class="check"><input type="checkbox" id="decl"><span>I confirm that all fuel receipts listed above relate to the company vehicle and that the information provided is correct. All original receipts are attached.</span></label>' +
+      '<div class="field"><label>Your signature</label>' +
+      (u.signature ? '<div class="row"><img class="sig-img" alt="Your saved signature" src="' + esc(u.signature) + '"><button type="button" class="link" data-act="change-sig">Change</button></div><span class="hint">Your saved signature is added to the claim.</span>'
+        : '<div class="sig" id="d-sig"><canvas></canvas><div class="base"></div><div class="ph">Sign here with your finger</div></div><div class="spread"><span class="hint">Saved for your next claims, so you only sign once.</span><button type="button" class="link" data-act="sig-clear">Clear</button></div>') +
+      "</div></div>" +
+      '<div id="submit-msg" class="banner bad" style="margin-top:14px" hidden></div>' +
+      '<div class="sticky-actions"><a class="btn" href="#/home">Cancel</a><button class="btn primary" data-act="create-claim">Create claim &amp; PDF</button></div>';
+    return h;
+  }
+
+  function createClaim() {
+    var open = billsWithMileage().filter(function (b) { return !b.claimId; }).slice(0, CLAIM_SIZE);
+    var msg = document.getElementById("submit-msg"), problems = [];
+    var sig = st.user.signature || (draftPad && !draftPad.isEmpty() ? draftPad.toDataURL() : "");
+    if (!document.getElementById("decl").checked) problems.push("Tick the declaration to confirm.");
+    if (!sig) problems.push("Sign in the signature box.");
+    if (problems.length) {
+      msg.hidden = false;
+      msg.innerHTML = problems.map(esc).join("<br>");
+      return;
+    }
+    var btn = document.querySelector('[data-act="create-claim"]');
+    btn.disabled = true;
+    btn.textContent = "Creating…";
+    (st.user.signature ? Promise.resolve() : S.updateProfile({ signature: sig })).then(function () {
+      return S.createClaim(open.map(function (b) { return b.id; }), { signature: sig });
+    }).then(function (c) {
+      st.justFinished = c.id;
+      toast("Claim created");
+      go("#/claim/" + c.id);
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = "Create claim & PDF";
+      toast(e.message);
+    });
+  }
+
+  function signatureSheet() {
+    sheet('<h2>Your signature</h2><p class="sub" style="margin-top:-6px">It goes on every claim you create.</p><div class="stack">' +
+      '<div class="sig" id="s-sig"><canvas></canvas><div class="base"></div><div class="ph">Sign here with your finger</div></div>' +
+      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn primary" id="s-save">Save signature</button></div></div>', function (el, close) {
+      var pad = signaturePad(el.querySelector("#s-sig"));
+      el.querySelector("#s-save").onclick = function () {
+        if (pad.isEmpty()) { toast("Please sign first."); return; }
+        S.updateProfile({ signature: pad.toDataURL() }).then(function () { close(); toast("Signature saved"); route(); });
+      };
+    });
+  }
+
+  // ---- monthly report ----
+
+  function monthReport(m) {
+    var all = billsWithMileage(), list = all.filter(function (b) { return monthOf(b.date) === m; });
+    var t = {
+      count: list.length,
+      km: sum(list, function (b) { return b.distance || 0; }),
+      litres: sum(list, function (b) { return Number(b.litres) || 0; }),
+      amount: sum(list, function (b) { return Number(b.amount) || 0; }),
+      claimed: list.filter(function (b) { return b.claimId; }).length
+    };
+    var withKm = list.filter(function (b) { return b.distance; });
+    var kmLitres = sum(withKm, function (b) { return Number(b.litres) || 0; });
+    t.kmpl = kmLitres > 0 ? t.km / kmLitres : null;
+    t.ppl = t.litres > 0 ? t.amount / t.litres : null;
+    var claims = st.mine.filter(function (c) { return monthOf(c.submissionDate) === m || list.some(function (b) { return b.claimId === c.id; }); });
+    return { month: m, label: monthLabel(m), bills: list, totals: t, claims: claims };
+  }
+
+  function viewReports(m) {
+    var months = {};
+    st.bills.forEach(function (b) { if (b.date) months[monthOf(b.date)] = 1; });
+    var keys = Object.keys(months).sort().reverse();
+    if (!keys.length) return '<h1>Monthly report</h1><div class="card empty"><b>No bills yet</b>Your monthly fuel report appears here once you add fuel bills.</div>';
+    if (!m || keys.indexOf(m) < 0) m = keys[0];
+    var rep = monthReport(m), t = rep.totals;
+    var h = '<h1>Monthly report</h1><p class="sub">All your fuel bills for a month, as a PDF to share.</p>' +
+      '<div class="chips" style="margin-bottom:14px">' + keys.map(function (k) { return '<a class="chip' + (k === m ? " on" : "") + '" href="#/reports/' + k + '">' + esc(monthLabel(k)) + "</a>"; }).join("") + "</div>" +
+      '<div class="kpis">' + kpi("Distance driven", t.km.toLocaleString(), "km", plural(t.count, "bill")) + kpi("Fuel cost", kd(t.amount), "KD", lit(t.litres) + " litres") +
+      kpi("Average", t.kmpl ? t.kmpl.toFixed(1) : "—", "km/L", t.ppl ? t.ppl.toFixed(3) + " KD per litre" : "") +
+      kpi("Claimed", t.claimed + " / " + t.count, "", plural(rep.claims.length, "claim")) + "</div>" +
+      '<div class="card stack" style="margin-top:14px"><label class="check"><input type="checkbox" id="rep-photos" checked><span>Include the bill photos in the PDF</span></label>' +
+      '<div class="btn-row"><button class="btn primary" data-act="report-share" data-m="' + m + '">' + (canShare() ? ICON.whatsapp + "Share on WhatsApp" : ICON.share + "Share PDF") + "</button>" +
+      '<button class="btn" data-act="report-pdf" data-m="' + m + '">' + ICON.pdf + "Download PDF</button></div></div>" +
+      '<div class="section-title"><h2>Bills in ' + esc(rep.label) + '</h2></div><div class="card flush">' + rep.bills.slice().reverse().map(billRow).join("") + "</div>";
+    return h;
+  }
+
+  function makeReportPdf(m) {
+    var rep = monthReport(m), withPhotos = document.getElementById("rep-photos") ? document.getElementById("rep-photos").checked : true;
+    toast("Preparing PDF…");
+    return Promise.all(rep.bills.map(function (b) { return withPhotos ? getPhoto(null, b.photoId) : null; })).then(function (photos) {
+      rep.bills.forEach(function (b) { b.claimNo = b.claimId ? claimNoOf(b.claimId) : ""; });
+      return P.buildMonthly(rep, photos, st.user, C, S.STATUS).output("blob");
+    });
   }
 
   // ------------------------------------------------------------------ router
@@ -1133,7 +1441,12 @@
       case "claims": html = viewClaims(); break;
       case "claim": html = viewClaim(id, false); break;
       case "review": html = viewClaim(id, true); break;
+      case "bills": html = viewBills(); break;
+      case "add": html = LOCAL ? viewBills() : viewHome(); break;
+      case "make-claim": html = viewMakeClaim(); break;
+      case "reports": html = viewReports(id); break;
       case "new":
+        if (LOCAL) { html = viewBills(); page = "add"; break; }
         if (!st.draft) startDraft(null);
         html = viewForm();
         break;
@@ -1152,6 +1465,11 @@
     var sig = document.getElementById("d-sig");
     if (sig) draftPad = signaturePad(sig);
     loadThumbs();
+    if (page === "add") {
+      history.replaceState(null, "", "#/bills");
+      renderNav();
+      billSheet(null);
+    }
   }
 
   // ------------------------------------------------------------------ events
@@ -1185,6 +1503,19 @@
         break;
       case "do": doAction(el.getAttribute("data-id"), el.getAttribute("data-a")); break;
       case "mark-paid": markPaid(el.getAttribute("data-id")); break;
+      case "add-bill": billSheet(null); break;
+      case "open-bill": billSheet(el.getAttribute("data-id")); break;
+      case "create-claim": createClaim(); break;
+      case "change-sig": signatureSheet(); break;
+      case "report-pdf":
+      case "report-share":
+        var rm = el.getAttribute("data-m"), rname = "Fuel report " + monthLabel(rm) + " " + (st.user.name || "").replace(/[^\w\- ]+/g, "").trim() + ".pdf";
+        el.disabled = true;
+        makeReportPdf(rm).then(function (blob) {
+          el.disabled = false;
+          return a === "report-pdf" ? saveFile(blob, rname) : shareFile(blob, rname, "Fuel report " + monthLabel(rm));
+        }).catch(function (x) { el.disabled = false; toast("Couldn't make the PDF: " + x.message); });
+        break;
       case "reopen":
         S.act(findClaim(el.getAttribute("data-id")), "reopen", {}).then(function () { toast("Marked as not paid"); });
         break;
@@ -1203,7 +1534,7 @@
         break;
       case "delete-claim":
         var dc = findClaim(el.getAttribute("data-id"));
-        sheet("<h2>Delete this claim?</h2><p class=\"sub\">" + esc(dc.claimNo) + " and its receipt photos will be removed from this phone.</p><div class=\"btn-row\"><button class=\"btn\" data-close>Keep it</button><button class=\"btn bad\" id=\"del-go\">Delete</button></div>", function (s, close) {
+        sheet("<h2>Delete this claim?</h2><p class=\"sub\">" + esc(dc.claimNo) + " will be deleted. " + (LOCAL ? "Its bills go back to your bills list." : "") + "</p><div class=\"btn-row\"><button class=\"btn\" data-close>Keep it</button><button class=\"btn bad\" id=\"del-go\">Delete</button></div>", function (s, close) {
           s.querySelector("#del-go").onclick = function () { S.deleteClaim(dc.id).then(function () { close(); toast("Claim deleted"); go("#/claims"); }); };
         });
         break;
@@ -1312,10 +1643,12 @@
     st.unsub.forEach(function (u) { try { u(); } catch (e) {} });
     st.unsub = [];
     st.mine = [];
+    st.bills = [];
     st.all = [];
     st.users = [];
     if (!st.user) return;
     st.unsub.push(S.watchClaims("mine", function (list) { st.mine = list; refresh(); }));
+    if (LOCAL) st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
     if (isStaff()) {
       st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
     }
@@ -1326,7 +1659,7 @@
   function refresh() {
     // don't redraw while the person is filling in the claim form or a dialog is open
     var page = (location.hash || "").slice(2).split("/")[0];
-    if (page === "new" || page === "edit" || document.querySelector(".scrim")) return;
+    if (page === "new" || page === "edit" || page === "make-claim" || document.querySelector(".scrim")) return;
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(route, 60);
   }

@@ -3,13 +3,17 @@
 Each driver installs the app on their own phone. There is no server and no account:
 
 1. On first launch the driver enters their **name, employee ID, department and vehicle number** (once).
-2. **New fuel claim**: add each fuel receipt with a photo (date, station, odometer, litres, amount in KD),
-   tick the declaration and sign with a finger, then tap **Finish claim**.
-3. Tap **Share on WhatsApp** to send the PDF to the office, or **Download PDF** to keep it on the phone.
-   The PDF is form **EZ-OPS-FUEL-002**: sections A–D filled in, section E (verification and approval) left
-   blank for the office, then the receipt photos in the same order as the table.
-4. When the money arrives, the driver taps **Mark as paid**. The home screen shows what is waiting for
-   payment, what was paid this month, and totals for the year.
+2. **Add bill** after every fill-up: take a photo of the bill and enter the date, station, odometer,
+   litres and amount. The app works out the **km driven since the last bill**, **km per litre** and
+   **price per litre**. An odometer reading lower than the previous bill is refused.
+3. The home screen counts the bills: **7 / 10**. At **10 bills**, tap **Create claim**: the oldest 10 bills
+   go into one claim. The driver ticks the declaration and signs **once**; the signature is saved and used
+   on every later claim (change it in Profile).
+4. Tap **Share on WhatsApp** to send the claim PDF to the office, or **Download PDF**. The PDF is form
+   **EZ-OPS-FUEL-002**: sections A–D filled in, section E left blank for the office, then the bill photos.
+5. **Monthly** shows the month's report (bills, km, litres, KD, km/L, claims) and shares it as a PDF,
+   with or without the bill photos.
+6. When the money arrives, the driver opens the claim and taps **Mark as paid**.
 
 Claims and photos are saved **on that phone only**. Uninstalling the app or clearing its data deletes them,
 so drivers should keep the PDFs they send.

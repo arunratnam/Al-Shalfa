@@ -144,10 +144,39 @@
   // ------------------------------------------------------------------ On-phone store (one driver per phone)
 
   function LocalStore() {
-    var PROFILE = "ezfuel-profile", CLAIMS = "ezfuel-claims", COUNTER = "ezfuel-counter";
+    var PROFILE = "ezfuel-profile", CLAIMS = "ezfuel-claims", COUNTER = "ezfuel-counter", BILLS = "ezfuel-bills";
     var profile = read(PROFILE, null);
     var claims = read(CLAIMS, []);
-    var authCbs = [], claimCbs = [];
+    var bills = read(BILLS, null);
+    var authCbs = [], claimCbs = [], billCbs = [];
+    if (bills === null) migrate();
+
+    /** Version 1.x kept receipts inside claims. Turn them into bills: drafts become unclaimed bills. */
+    function migrate() {
+      bills = [];
+      claims.forEach(function (c) {
+        var claimed = c.status !== "draft";
+        c.billIds = [];
+        (c.receipts || []).forEach(function (r) {
+          var b = { id: r.id || "b" + now() + Math.random().toString(36).slice(2, 6), date: r.date, station: r.station,
+            odometer: r.odometer, litres: r.litres, amount: r.amount, photoId: r.photoId || "",
+            claimId: claimed ? c.id : null, createdAt: c.createdAt || now() };
+          r.id = b.id;
+          bills.push(b);
+          if (claimed) c.billIds.push(b.id);
+        });
+      });
+      claims = claims.filter(function (c) { return c.status !== "draft"; });
+      try {
+        write(BILLS, bills);
+        write(CLAIMS, claims);
+      } catch (e) {}
+    }
+
+    function emitBills() {
+      var list = bills.slice();
+      billCbs.forEach(function (cb) { cb(list); });
+    }
 
     function read(k, def) {
       try {
@@ -192,7 +221,7 @@
         return Promise.resolve(profile);
       },
       updateProfile: function (f) {
-        ["name", "employeeId", "department", "vehicle"].forEach(function (k) { if (k in f) profile[k] = f[k]; });
+        ["name", "employeeId", "department", "vehicle", "signature"].forEach(function (k) { if (k in f) profile[k] = f[k]; });
         write(PROFILE, profile);
         tellAuth();
         return Promise.resolve(profile);
@@ -235,15 +264,79 @@
         emit();
         return Promise.resolve(copy);
       },
+      /** Deleting a claim puts its bills back in the list, ready for a new claim. */
       deleteClaim: function (id) {
-        var gone = claims.filter(function (c) { return c.id === id; })[0];
         claims = claims.filter(function (c) { return c.id !== id; });
+        bills.forEach(function (b) { if (b.claimId === id) b.claimId = null; });
         write(CLAIMS, claims);
+        write(BILLS, bills);
         emit();
-        if (gone) {
-          (gone.receipts || []).forEach(function (r) { if (r.photoId) idbDel(r.photoId); });
-        }
+        emitBills();
         return Promise.resolve();
+      },
+
+      // ---- fuel bills ----
+      watchBills: function (cb) {
+        billCbs.push(cb);
+        setTimeout(function () { cb(bills.slice()); }, 0);
+        return function () {
+          billCbs = billCbs.filter(function (x) { return x !== cb; });
+        };
+      },
+      saveBill: function (bill) {
+        var b = JSON.parse(JSON.stringify(bill));
+        if (!b.id) {
+          b.id = "b" + now() + Math.random().toString(36).slice(2, 6);
+          b.createdAt = now();
+          b.claimId = null;
+        }
+        b.updatedAt = now();
+        var i = bills.map(function (x) { return x.id; }).indexOf(b.id);
+        if (i >= 0) bills[i] = b;
+        else bills.push(b);
+        try {
+          write(BILLS, bills);
+        } catch (e) {
+          return Promise.reject(e);
+        }
+        emitBills();
+        return Promise.resolve(b);
+      },
+      deleteBill: function (id) {
+        var b = bills.filter(function (x) { return x.id === id; })[0];
+        if (!b) return Promise.resolve();
+        if (b.claimId) return Promise.reject(new Error("This bill is part of a claim. Delete the claim first."));
+        bills = bills.filter(function (x) { return x.id !== id; });
+        write(BILLS, bills);
+        emitBills();
+        if (b.photoId) idbDel(b.photoId);
+        return Promise.resolve();
+      },
+      /** Makes a submitted claim from the given bills (oldest first) and marks them as claimed. */
+      createClaim: function (billIds, extra) {
+        var self = this;
+        var chosen = bills.filter(function (b) { return billIds.indexOf(b.id) >= 0 && !b.claimId; })
+          .sort(function (a, b) { return (a.date || "").localeCompare(b.date || "") || (Number(a.odometer) || 0) - (Number(b.odometer) || 0); });
+        if (!chosen.length) return Promise.reject(new Error("No bills to claim."));
+        return self.newClaimNo().then(function (no) {
+          var t = now();
+          var c = {
+            claimNo: no, ownerUid: "me", driverName: profile.name, employeeId: profile.employeeId, department: profile.department,
+            vehicle: profile.vehicle, periodFrom: chosen[0].date, periodTo: chosen[chosen.length - 1].date,
+            submissionDate: new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 10),
+            receipts: chosen.map(function (b) {
+              return { id: b.id, date: b.date, station: b.station, odometer: b.odometer, litres: b.litres, amount: b.amount, photoId: b.photoId };
+            }),
+            billIds: chosen.map(function (b) { return b.id; }), declaration: true, driverSignature: (extra && extra.signature) || "",
+            status: "submitted", submittedAt: t, history: [{ status: "submitted", action: "submit", byUid: "me", byName: profile.name, at: t, note: "" }]
+          };
+          return self.saveClaim(c);
+        }).then(function (saved) {
+          bills.forEach(function (b) { if (saved.billIds.indexOf(b.id) >= 0) b.claimId = saved.id; });
+          write(BILLS, bills);
+          emitBills();
+          return saved;
+        });
       },
       /** On the phone the driver moves their own claim: finish (submit), mark paid, or reopen. */
       act: function (claim, action, data) {

@@ -306,5 +306,147 @@
     return doc;
   }
 
-  window.EZPdf = { build: build, date: d, kd: kd };
+  // ------------------------------------------------------------------ monthly report
+
+  /** Draws a table with a header row, repeating the header on new pages. cols = [[title, width, align]] */
+  function table(doc, y, cols, rows, opts) {
+    opts = opts || {};
+    var rh = 7;
+    function head() {
+      var x = M;
+      cols.forEach(function (c) {
+        cell(doc, x, y, c[1], 8, true);
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "bold");
+        doc.text(c[0], x + c[1] / 2, y + 5.2, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        x += c[1];
+      });
+      y += 8;
+    }
+    head();
+    rows.forEach(function (r, ri) {
+      if (y + rh > 280) {
+        doc.addPage();
+        y = 16;
+        head();
+      }
+      var x = M, bold = opts.boldLast && ri === rows.length - 1;
+      cols.forEach(function (c, k) {
+        if (bold) {
+          doc.setFillColor(FILL[0], FILL[1], FILL[2]);
+          doc.rect(x, y, c[1], rh, "FD");
+        } else {
+          cell(doc, x, y, c[1], rh, false);
+        }
+        doc.setFont("helvetica", bold ? "bold" : "normal");
+        var v = r[k] === undefined || r[k] === null ? "" : String(r[k]);
+        if (v) {
+          if (c[2] === "left") fit(doc, v, x + 2, y + 4.8, c[1] - 4, 8.5);
+          else if (c[2] === "right") fit(doc, v, x + c[1] - 2, y + 4.8, c[1] - 4, 8.5, { align: "right" });
+          else fit(doc, v, x + c[1] / 2, y + 4.8, c[1] - 3, 8.5, { align: "center" });
+        }
+        x += c[1];
+      });
+      doc.setFont("helvetica", "normal");
+      y += rh;
+    });
+    return y;
+  }
+
+  /**
+   * rep: { month, label, bills: [{date, station, odometer, distance, litres, amount, kmpl, claimNo}], totals, claims }
+   * photos: data URLs in the same order as rep.bills (or nulls). profile: the driver.
+   */
+  function buildMonthly(rep, photos, profile, cfg, labels) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    var t = rep.totals;
+    doc.setProperties({ title: "Monthly fuel report " + rep.label + " " + (profile.name || ""), author: cfg.companyName || "" });
+
+    if (window.EZ_LOGO) {
+      try { doc.addImage(window.EZ_LOGO, "PNG", 105 - 25, 9, 50, 50 * 134 / 308); } catch (e) {}
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(RED[0], RED[1], RED[2]);
+    doc.text("MONTHLY FUEL REPORT", 105, 38, { align: "center" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.setFontSize(11);
+    doc.text(rep.label.toUpperCase(), 105, 44, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text("Fuel bills summary · reference form " + cfg.docNo, 105, 49, { align: "center" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+
+    var y = 57;
+    section(doc, "A. DRIVER DETAILS", y);
+    y += 2;
+    pairRow(doc, y, 8, [["Driver Name", profile.name, 34, 62], ["Employee ID", profile.employeeId, 34, 52]]);
+    y += 8;
+    pairRow(doc, y, 8, [["Vehicle Number", profile.vehicle, 34, 62], ["Department", profile.department, 34, 52]]);
+    y += 8;
+
+    y += 7;
+    section(doc, "B. MONTH SUMMARY", y);
+    y += 2;
+    pairRow(doc, y, 8, [["Number of Bills", String(t.count), 42, 54], ["Distance Driven", t.km.toLocaleString("en-US") + " km", 42, 44]]);
+    y += 8;
+    pairRow(doc, y, 8, [["Total Litres", num(t.litres, 2), 42, 54], ["Total Amount", kd(t.amount) + " KD", 42, 44]]);
+    y += 8;
+    pairRow(doc, y, 8, [["Average Fuel Economy", t.kmpl ? t.kmpl.toFixed(1) + " km/L" : "—", 42, 54], ["Average Price", t.ppl ? t.ppl.toFixed(3) + " KD/L" : "—", 42, 44]]);
+    y += 8;
+
+    y += 7;
+    section(doc, "C. FUEL BILLS", y);
+    y += 2;
+    var cols = [["No.", 8], ["Date", 19], ["Fuel Station", 33, "left"], ["Odometer", 19], ["Distance km", 19], ["Litres", 15], ["Amount KD", 18], ["km/L", 12], ["Claim No.", 39]];
+    var rows = rep.bills.map(function (b, i) {
+      return [i + 1, d(b.date), b.station, num(b.odometer, 0), b.distance ? String(b.distance) : "—", num(b.litres, 2), kd(b.amount), b.kmpl ? b.kmpl.toFixed(1) : "—", b.claimNo || "Not claimed"];
+    });
+    rows.push(["", "", "Total", "", t.km ? String(t.km) : "", num(t.litres, 2), kd(t.amount), t.kmpl ? t.kmpl.toFixed(1) : "", t.claimed + "/" + t.count + " claimed"]);
+    y = table(doc, y, cols, rows, { boldLast: true });
+
+    if (rep.claims.length) {
+      if (y + 30 > 280) { doc.addPage(); y = 16; } else { y += 9; }
+      section(doc, "D. CLAIMS", y);
+      y += 2;
+      y = table(doc, y, [["Claim No.", 46, "left"], ["Period", 46], ["Bills", 16], ["Amount KD", 24], ["Status", 22], ["Paid On", 28]],
+        rep.claims.map(function (c) {
+          return [c.claimNo, d(c.periodFrom) + " – " + d(c.periodTo), c.totals ? c.totals.count : "", kd(c.totals ? c.totals.amount : 0),
+            (labels[c.status] || { label: c.status }).label, c.paidAt ? dt(c.paidAt) : ""];
+        }));
+    }
+
+    // bill photos, two per page
+    var withPhotos = [];
+    rep.bills.forEach(function (b, k) { if (photos && photos[k]) withPhotos.push({ r: b, k: k, img: photos[k] }); });
+    for (var p = 0; p < withPhotos.length; p++) {
+      if (p % 2 === 0) {
+        doc.addPage();
+        section(doc, "FUEL BILL PHOTOS  ·  " + rep.label.toUpperCase(), 16);
+      }
+      var slotY = p % 2 === 0 ? 22 : 156, item = withPhotos[p];
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "bold");
+      doc.text("Bill " + (item.k + 1), M, slotY + 4);
+      doc.setFont("helvetica", "normal");
+      doc.text([d(item.r.date), item.r.station || "", kd(item.r.amount) + " KD", num(item.r.odometer, 0) + " km"].join("   ·   "), M + 18, slotY + 4);
+      try {
+        var props = doc.getImageProperties(item.img);
+        var sc = Math.min(W / props.width, 118 / props.height), iw = props.width * sc, ih = props.height * sc;
+        doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+        doc.addImage(item.img, "JPEG", M + (W - iw) / 2, slotY + 7, iw, ih);
+        doc.rect(M + (W - iw) / 2, slotY + 7, iw, ih);
+      } catch (e) {
+        doc.text("(photo could not be added)", M, slotY + 14);
+      }
+    }
+
+    footer(doc, { claimNo: "Monthly fuel report " + rep.label + " · " + (profile.name || "") });
+    return doc;
+  }
+
+  window.EZPdf = { build: build, buildMonthly: buildMonthly, date: d, kd: kd };
 })();
