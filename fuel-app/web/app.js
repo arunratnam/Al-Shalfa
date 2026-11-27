@@ -54,9 +54,26 @@
     return c.amountApproved !== undefined && c.amountApproved !== null && ["approved", "paid"].indexOf(c.status) >= 0
       ? Number(c.amountApproved) : (c.totals ? c.totals.amount : 0);
   }
-  function isAdmin() { return !LOCAL && !!st.user && st.user.role === "admin"; }
+  // Online roles: driver (staff) < supervisor (verifies) < manager (approves, pays) < admin (also manages people)
+  function role() { return !LOCAL && st.user ? st.user.role || "driver" : "driver"; }
+  function isAdmin() { return role() === "admin"; }
+  function isOffice() { return ["supervisor", "manager", "admin"].indexOf(role()) >= 0; }
+  function canApprove() { return role() === "manager" || role() === "admin"; }
+  /** What the signed-in person may do with a claim (never on their own claim). */
+  function claimActions(c) {
+    var a = [];
+    if (LOCAL || !isOffice() || c.ownerUid === st.user.uid) return a;
+    if (c.status === "submitted") a.push("verify");
+    if ((c.status === "submitted" || c.status === "verified") && canApprove()) a.push("approve");
+    if (c.status === "submitted" || (c.status === "verified" && canApprove())) a.push("return");
+    if ((c.status === "submitted" || c.status === "verified") && canApprove()) a.push("reject");
+    if (c.status === "approved" && canApprove()) a.push("pay");
+    if (c.status === "paid" && canApprove()) a.push("reopen");
+    return a;
+  }
+  function myHref(page) { return isOffice() ? "#/my-" + page : "#/" + page; }
   function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
-  function isStaff() { return S.isStaff(st.user); }
+  function isStaff() { return isOffice(); }
   function go(hash) {
     if (location.hash === hash) route();
     else location.hash = hash;
@@ -315,9 +332,10 @@
     $nav.hidden = false;
     var r = (location.hash || "#/home").split("/")[1] || "home";
     var items;
-    if (isAdmin()) {
+    if (isOffice()) {
       items = [["home", "Dashboard", ICON.office], ["all-bills", "Bills", ICON.fuel], ["claims", "Claims", ICON.list],
-        ["reports", "Reports", ICON.pdf], ["users", "People", ICON.users]];
+        ["reports", "Reports", ICON.pdf], ["mine", "My fuel", ICON.user]];
+      if (isAdmin()) items.push(["users", "People", ICON.users]);
     } else if (true) {
       items = [["home", "Home", ICON.home], ["bills", "Bills", ICON.fuel], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
         ["claims", "Claims", ICON.list], ["reports", "Monthly", ICON.office]];
@@ -329,7 +347,8 @@
     }
     $nav.innerHTML = items.map(function (it) {
       var on = r === it[0] || (it[0] === "claims" && r === "claim") || (it[0] === "office" && r === "review");
-      if (it[0] === "claims" && r === "make-claim") on = true;
+      if (it[0] === "claims" && r === "make-claim" && !isOffice()) on = true;
+      if (it[0] === "mine" && ["bills", "make-claim", "my-claims", "my-reports"].indexOf(r) >= 0) on = true;
       return '<a href="#/' + it[0] + '" class="' + (on ? "on " : "") + (it[0] === "new" || it[0] === "add" ? "new" : "") + '">' + it[2] + "<span>" + it[1] + "</span></a>";
     }).join("");
   }
@@ -342,7 +361,7 @@
     }
     top.hidden = false;
     top.innerHTML = '<img class="logo" src="img/logo.png" alt="EZ Storage">' +
-      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(isAdmin() ? "Office" : st.user.vehicle || "") + "</span></div>" +
+      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
       '<a class="avatar" href="#/profile" aria-label="Your profile">' + esc(initials(st.user.name)) + "</a>";
   }
 
@@ -406,7 +425,7 @@
   }
 
   function viewHome() {
-    if (isAdmin()) return viewOfficeOnline();
+    if (isOffice()) return viewOfficeOnline();
     return viewHomeLocal();
     var mine = st.mine, now = new Date(), month = now.toISOString().slice(0, 7);
     var waiting = mine.filter(function (c) { return c.status === "submitted" || c.status === "verified"; });
@@ -446,7 +465,7 @@
 
   function viewHomeLocal() {
     var mine = st.mine, now = new Date(), month = monthOf(today());
-    var waiting = mine.filter(function (c) { return c.status === "submitted" || c.status === "approved"; });
+    var waiting = mine.filter(function (c) { return c.status === "submitted" || c.status === "verified" || c.status === "approved"; });
     var returned = mine.filter(function (c) { return c.status === "returned"; });
     var paidMonth = mine.filter(function (c) { return c.status === "paid" && c.paidAt && monthOf(new Date(c.paidAt).toISOString()) === month; });
     var all = billsWithMileage(), open = all.filter(function (b) { return !b.claimId; });
@@ -473,7 +492,7 @@
           '<button class="btn primary block" data-act="add-bill">' + ICON.camera + "Add fuel bill</button>") + "</div>";
 
     // claims already made
-    h += '<div class="section-title"><h2>My claims</h2><a href="#/claims">See all</a></div><div class="kpis">' +
+    h += '<div class="section-title"><h2>My claims</h2><a href="' + myHref("claims") + '">See all</a></div><div class="kpis">' +
       kpi(LOCAL ? "Waiting for payment" : "Waiting (approval / payment)", kd(sum(waiting)), "KD", plural(waiting.length, "claim"), waiting.length > 0) +
       kpi("Paid this month", kd(sum(paidMonth, paidAmt)), "KD", plural(paidMonth.length, "claim")) + "</div>";
     if (returned.length) {
@@ -484,7 +503,7 @@
     }
 
     // the whole month, claimed and new bills together
-    h += '<div class="section-title"><h2>This month · all bills</h2><a href="#/reports/' + month + '">Monthly report</a></div><div class="kpis">' +
+    h += '<div class="section-title"><h2>This month · all bills</h2><a href="' + myHref("reports") + "/" + month + '">Monthly report</a></div><div class="kpis">' +
       kpi("Distance driven", sum(thisMonth, function (b) { return b.distance || 0; }).toLocaleString(), "km", plural(thisMonth.length, "bill")) +
       kpi("Fuel cost", kd(sum(thisMonth, function (b) { return Number(b.amount) || 0; })), "KD", lit(sum(thisMonth, function (b) { return Number(b.litres) || 0; })) + " litres") + "</div>";
 
@@ -502,7 +521,7 @@
   // ------------------------------------------------------------------ my claims
 
   function viewClaims() {
-    if (isAdmin()) return viewAllClaims();
+    if (isOffice() && (location.hash || "").indexOf("#/my-claims") !== 0) return viewAllClaims();
     var f = st.filter.status;
     var keys = ["all", "draft", "submitted", "verified", "approved", "paid", "returned", "rejected"];
     var counts = {};
@@ -630,14 +649,15 @@
   function viewClaimLocal(id) {
     var c = findClaim(id);
     if (!c) return '<div class="card empty"><b>Claim not found</b>It may have been deleted. <a href="#/home">Go home</a></div>';
-    var admin = isAdmin(), own = c.ownerUid === st.user.uid || LOCAL;
+    var admin = isOffice() && c.ownerUid !== st.user.uid, own = c.ownerUid === st.user.uid || LOCAL, acts0 = claimActions(c);
     var h = '<div class="spread" style="margin-bottom:4px"><h1>' + esc(c.claimNo || "Claim") + "</h1>" + statusChip(c.status) + "</div>" +
       '<p class="sub">' + (admin ? esc(c.driverName) + " · " : "") + esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + esc(c.vehicle || "") + "</p>";
 
     // status message
     var msg = "";
     if (st.justFinished === c.id && c.status === "submitted") msg = '<div class="banner good"><b>Claim created ✓</b> ' + (LOCAL ? "Now send the PDF to the office on WhatsApp." : "The admin can see it now and will check it.") + "</div>";
-    else if (c.status === "submitted") msg = '<div class="banner info">' + (admin ? "Check the bills and photos, then approve, return or reject this claim." : LOCAL ? "Send the PDF to the office. When the money arrives, tap <b>Mark as paid</b>." : "Waiting for the admin to check and approve it.") + "</div>";
+    else if (c.status === "submitted") msg = '<div class="banner info">' + (admin ? (canApprove() ? "Check the bills and photos, then verify or approve, return or reject this claim." : "Check the bills and photos, then verify it for the manager, or return it to the driver.") : LOCAL ? "Send the PDF to the office. When the money arrives, tap <b>Mark as paid</b>." : "Waiting for the admin to check and approve it.") + "</div>";
+    else if (c.status === "verified") msg = '<div class="banner info"><b>Verified</b> by ' + esc(c.verifiedBy || "") + " on " + esc(fmtTime(c.verifiedAt)) + (admin && canApprove() ? ". Approve it, return it or reject it." : ". Waiting for the manager to approve it.") + (c.remarks ? "<br>" + esc(c.remarks) : "") + "</div>";
     else if (c.status === "approved") msg = '<div class="banner good"><b>Approved ' + kd(c.amountApproved) + " KD</b> by " + esc(c.approvedBy || "") + " on " + esc(fmtTime(c.approvedAt)) + (admin ? ". Mark it paid when the money is sent." : ". Waiting for payment.") + (c.remarks ? "<br>" + esc(c.remarks) : "") + "</div>";
     else if (c.status === "paid") msg = '<div class="banner good"><b>Paid ' + kd(paidAmt(c)) + " KD</b> on " + esc(fmtDate(new Date(c.paidAt).toISOString())) + (c.paidRef ? " · Ref. " + esc(c.paidRef) : "") + "</div>";
     else if (c.status === "returned") msg = '<div class="banner warn"><b>Returned by the admin:</b> ' + esc(c.remarks || "") + (own && !admin ? "<br>Delete this claim to fix the bills, then create it again." : "") + "</div>";
@@ -645,13 +665,14 @@
     if (msg) h += msg.replace('class="banner', 'style="margin-bottom:14px" class="banner');
 
     var acts = [];
-    if (admin && c.status === "submitted") {
-      acts.push('<button class="btn good" data-act="approve" data-id="' + esc(c.id) + '">Approve</button>');
-      acts.push('<button class="btn warn" data-act="do" data-a="return" data-id="' + esc(c.id) + '">Return to driver</button>');
-      acts.push('<button class="btn bad" data-act="do" data-a="reject" data-id="' + esc(c.id) + '">Reject</button>');
-    }
-    if ((admin && c.status === "approved") || (LOCAL && c.status === "submitted")) acts.push('<button class="btn good" data-act="mark-paid" data-id="' + esc(c.id) + '">Mark as paid</button>');
-    if ((admin || LOCAL) && c.status === "paid") acts.push('<button class="btn" data-act="reopen" data-id="' + esc(c.id) + '">Not paid yet</button>');
+    if (acts0.indexOf("verify") >= 0 && !canApprove()) acts.push('<button class="btn good" data-act="do" data-a="verify" data-id="' + esc(c.id) + '">Verify</button>');
+    if (acts0.indexOf("approve") >= 0) acts.push('<button class="btn good" data-act="approve" data-id="' + esc(c.id) + '">Approve</button>');
+    if (acts0.indexOf("verify") >= 0 && canApprove()) acts.push('<button class="btn" data-act="do" data-a="verify" data-id="' + esc(c.id) + '">Verify only</button>');
+    if (acts0.indexOf("return") >= 0) acts.push('<button class="btn warn" data-act="do" data-a="return" data-id="' + esc(c.id) + '">Return to driver</button>');
+    if (acts0.indexOf("reject") >= 0) acts.push('<button class="btn bad" data-act="do" data-a="reject" data-id="' + esc(c.id) + '">Reject</button>');
+    if (acts0.indexOf("pay") >= 0 || (LOCAL && c.status === "submitted")) acts.push('<button class="btn good" data-act="mark-paid" data-id="' + esc(c.id) + '">Mark as paid</button>');
+    if (acts0.indexOf("reopen") >= 0 || (LOCAL && c.status === "paid")) acts.push('<button class="btn" data-act="reopen" data-id="' + esc(c.id) + '">Not paid yet</button>');
+    if (isOffice() && c.ownerUid === st.user.uid && c.status !== "paid") h += '<p class="sub" style="font-size:12.5px">This is your own claim, so someone else must verify and approve it.</p>';
     acts.push('<button class="btn' + (acts.length ? "" : " primary") + '" data-act="share" data-id="' + esc(c.id) + '">' + (canShare() ? ICON.whatsapp + "Share on WhatsApp" : ICON.share + "Share PDF") + "</button>");
     acts.push('<button class="btn" data-act="pdf" data-id="' + esc(c.id) + '">' + ICON.pdf + "Download PDF</button>");
     h += '<div class="btn-row" style="margin-bottom:6px">' + acts.join("") + "</div>";
@@ -676,7 +697,7 @@
         return "<li><b>" + esc((S.STATUS[x.status] || {}).label || x.status) + "</b><span>" + esc(x.byName) + " · " + esc(fmtTime(x.at)) + "</span>" + (x.note ? "<p>" + esc(x.note) + "</p>" : "") + "</li>";
       }).join("") + "</ul></div>";
     }
-    var canDelete = LOCAL ? c.status !== "paid" : admin || (own && (c.status === "submitted" || c.status === "returned"));
+    var canDelete = LOCAL ? c.status !== "paid" : isAdmin() || (own && (c.status === "submitted" || c.status === "returned"));
     if (canDelete) {
       h += '<div style="margin-top:22px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete claim</button><p class="sub" style="font-size:12.5px;margin-top:6px">Deleting the claim puts its bills back in the list.</p></div>';
     }
@@ -1156,15 +1177,23 @@
     var users = st.users.slice().sort(function (a, b) { return order(a) - order(b) || (a.name || "").localeCompare(b.name || ""); });
     var h = '<h1>People</h1><p class="sub">Everyone who has created an account in the app. New accounts can\'t add bills until you allow them.</p><div class="card flush list">';
     h += users.map(function (u) {
-      var me = u.uid === st.user.uid, state = u.role === "admin" ? '<span class="status info">Admin</span>'
-        : u.pending && u.active === false ? '<span class="status warn">Waiting to be allowed</span>'
+      var me = u.uid === st.user.uid, state = u.pending && u.active === false ? '<span class="status warn">Waiting to be allowed</span>'
         : u.active === false ? '<span class="status bad">Turned off</span>' : '<span class="status good">Allowed</span>';
+      var pick = me ? "" : '<select aria-label="Role for ' + esc(u.name) + '" data-role="' + esc(u.uid) + '">' + S.ROLES.map(function (r) {
+        return '<option value="' + r + '"' + ((u.role || "driver") === r ? " selected" : "") + ">" + esc(S.ROLE_LABELS[r]) + "</option>";
+      }).join("") + "</select>";
       var btn = me ? "" : u.pending && u.active === false ? '<button class="btn small good" data-act="allow-user" data-uid="' + esc(u.uid) + '">Allow</button>'
-        : u.role === "admin" ? "" : '<button class="link" data-act="toggle-active" data-uid="' + esc(u.uid) + '">' + (u.active === false ? "Turn on" : "Turn off") + "</button>";
+        : '<button class="link" data-act="toggle-active" data-uid="' + esc(u.uid) + '">' + (u.active === false ? "Turn on" : "Turn off") + "</button>";
+      btn = pick + btn;
       return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + (me ? " (you)" : "") + "</b><span>" + esc(u.email || "") +
         " · " + esc(u.employeeId || "no ID") + " · " + esc(u.vehicle || "no vehicle") + '</span></div><div class="side">' + state + btn + "</div></div>";
     }).join("");
-    return h + "</div>" + '<p class="sub" style="font-size:12.5px;margin-top:10px">To make someone else an admin, change their <b>role</b> to <b>admin</b> in the Firebase console (Firestore → users).</p>';
+    return h + "</div>" + '<div class="card" style="margin-top:14px;font-size:13.5px"><b>Roles</b><br>' +
+      "<b>Driver / Staff:</b> adds their own fuel bills and claims.<br>" +
+      "<b>Supervisor:</b> also sees everyone's bills and claims, and verifies claims.<br>" +
+      "<b>Manager:</b> also approves claims and marks them paid.<br>" +
+      "<b>Admin:</b> everything, plus allowing people and choosing roles.<br>" +
+      '<span class="sub" style="font-size:12.5px">Nobody can verify or approve their own claim.</span></div>';
   }
 
   // ------------------------------------------------------------------ profile
@@ -1176,7 +1205,7 @@
       '<div class="grid2">' + field("employeeId", "Employee ID", "text", u.employeeId || "", "") + selectField("department", "Department", C.departments, u.department || "") + "</div>" +
       field("vehicle", "Vehicle number", "text", u.vehicle || "", 'placeholder="e.g. KWT 12-34567"') +
       '<button class="btn primary" type="submit">Save profile</button></form>' +
-      (!isAdmin() ? '<div class="section-title"><h2>Signature</h2></div><div class="card spread">' +
+      (true ? '<div class="section-title"><h2>Signature</h2></div><div class="card spread">' +
         (u.signature ? '<img class="sig-img" alt="Your saved signature" src="' + esc(u.signature) + '">' : '<span class="sub" style="margin:0">Not set yet. You sign once, on your first claim.</span>') +
         '<button class="btn small" data-act="change-sig">' + (u.signature ? "Change" : "Add signature") + "</button></div>" : "") +
       '<div class="section-title"><h2>Install on your phone</h2></div><div class="card stack" style="font-size:14px">' +
@@ -1269,7 +1298,7 @@
     if (b.distance) mil.push("+" + b.distance.toLocaleString() + " km");
     if (b.kmpl) mil.push(b.kmpl.toFixed(1) + " km/L");
     return '<button class="receipt bill" data-act="open-bill" data-id="' + esc(b.id) + '"><span class="thumb" data-thumb="' + esc(b.photoId || "") + '" data-claim="">' + (b.photoId ? "" : "No photo") + "</span>" +
-      '<span class="main"><b>' + (isAdmin() ? esc(b.driverName || "") + " · " : "") + esc(b.station || "—") + "</b><span>" + esc(fmtDate(b.date)) + " · " + (b.odometer ? Number(b.odometer).toLocaleString() + " km" : "") + "</span>" +
+      '<span class="main"><b>' + (isOffice() && b.ownerUid && b.ownerUid !== st.user.uid ? esc(b.driverName || "") + " · " : "") + esc(b.station || "—") + "</b><span>" + esc(fmtDate(b.date)) + " · " + (b.odometer ? Number(b.odometer).toLocaleString() + " km" : "") + "</span>" +
       (mil.length ? '<span class="mil">' + esc(mil.join(" · ")) + "</span>" : "") +
       '<span class="tag ' + (b.claimId ? "in" : "") + '">' + (b.claimId ? "In " + esc(claimNoOf(b.claimId)) : "Not claimed yet") + "</span></span>" +
       '<span class="amt">' + kd(b.amount) + " KD<small>" + lit(b.litres) + " L</small></span></button>";
@@ -1284,7 +1313,7 @@
     all.forEach(function (b) { (months[monthOf(b.date)] = months[monthOf(b.date)] || []).push(b); });
     Object.keys(months).sort().reverse().forEach(function (m) {
       var list = months[m];
-      h += '<div class="section-title"><h2>' + esc(monthLabel(m)) + '</h2><a href="#/reports/' + m + '">Report</a></div>' +
+      h += '<div class="section-title"><h2>' + esc(monthLabel(m)) + '</h2><a href="' + myHref("reports") + "/" + m + '">Report</a></div>' +
         '<p class="sub" style="margin:-4px 0 8px;font-size:13px">' + plural(list.length, "bill") + " · " + sum(list, function (b) { return b.distance || 0; }).toLocaleString() + " km · " +
         lit(sum(list, function (b) { return Number(b.litres) || 0; })) + " L · " + kd(sum(list, function (b) { return Number(b.amount) || 0; })) + " KD</p>" +
         '<div class="card flush">' + list.slice().reverse().map(billRow).join("") + "</div>";
@@ -1293,15 +1322,15 @@
   }
 
   function billSheet(id) {
-    var all = billsWithMileage();
-    if (isAdmin()) {
+    var all = billsWithMileage(), other = false;
+    if (id && isOffice() && !st.bills.some(function (x) { return x.id === id; })) {
       var owner = (st.allBills.filter(function (x) { return x.id === id; })[0] || {}).ownerUid;
       all = billsWithMileage(st.allBills.filter(function (x) { return x.ownerUid === owner; }));
+      other = true;
     }
     var b = id ? all.filter(function (x) { return x.id === id; })[0] : null;
     if (id && !b) return;
-    if (!id && isAdmin()) return;
-    var locked = !!(b && b.claimId) || isAdmin();
+    var locked = !!(b && b.claimId) || other;
     var r = b ? { id: b.id, date: b.date, station: b.station, odometer: b.odometer, litres: b.litres, amount: b.amount, photoId: b.photoId, createdAt: b.createdAt, claimId: b.claimId }
       : { date: today(), station: "", odometer: "", litres: "", amount: "", photoId: "" };
     var stations = {};
@@ -1309,7 +1338,7 @@
     var newPhoto = null;
     var dis = locked ? " disabled" : "";
     var h = "<h2>" + (b ? (locked ? "Fuel bill" : "Edit fuel bill") : "Add fuel bill") + "</h2>" +
-      (locked ? '<div class="banner info" style="margin-bottom:12px">' + (isAdmin() ? esc(b.driverName || "") + (b.claimId ? " · in claim " + esc(claimNoOf(b.claimId)) : " · not claimed yet") + (b.distance ? " · " + b.distance.toLocaleString() + " km since the previous bill" : "") : "This bill is in claim " + esc(claimNoOf(b.claimId)) + ", so it can't be changed.") + "</div>" : "") +
+      (locked ? '<div class="banner info" style="margin-bottom:12px">' + (other ? esc(b.driverName || "") + (b.claimId ? " · in claim " + esc(claimNoOf(b.claimId)) : " · not claimed yet") + (b.distance ? " · " + b.distance.toLocaleString() + " km since the previous bill" : "") : "This bill is in claim " + esc(claimNoOf(b.claimId)) + ", so it can't be changed.") + "</div>" : "") +
       '<div class="stack"><div class="photo-pick"><span id="r-prev">' + (r.photoId ? '<img alt="Bill photo" id="r-img">' : '<span class="ph">' + ICON.camera + "</span>") + "</span>" +
       '<div class="grow"><b>Bill photo</b><div style="font-size:12.5px;color:var(--muted)">Lay the bill flat in good light.</div>' +
       (locked ? "" : '<div class="row" style="margin-top:8px"><label class="btn small primary">' + ICON.camera + 'Take photo<input type="file" accept="image/*" capture="environment" id="r-cam" hidden></label><label class="btn small">Choose<input type="file" accept="image/*" id="r-file" hidden></label></div>') + "</div></div>" +
@@ -1504,7 +1533,7 @@
     if (!m || keys.indexOf(m) < 0) m = keys[0];
     var rep = monthReport(m), t = rep.totals;
     var h = '<h1>Monthly report</h1><p class="sub">All your fuel bills for a month, as a PDF to share.</p>' +
-      '<div class="chips" style="margin-bottom:14px">' + keys.map(function (k) { return '<a class="chip' + (k === m ? " on" : "") + '" href="#/reports/' + k + '">' + esc(monthLabel(k)) + "</a>"; }).join("") + "</div>" +
+      '<div class="chips" style="margin-bottom:14px">' + keys.map(function (k) { return '<a class="chip' + (k === m ? " on" : "") + '" href="' + myHref("reports") + "/" + k + '">' + esc(monthLabel(k)) + "</a>"; }).join("") + "</div>" +
       '<div class="kpis">' + kpi("Distance driven", t.km.toLocaleString(), "km", plural(t.count, "bill")) + kpi("Fuel cost", kd(t.amount), "KD", lit(t.litres) + " litres") +
       kpi("Average", t.kmpl ? t.kmpl.toFixed(1) : "—", "km/L", t.ppl ? t.ppl.toFixed(3) + " KD per litre" : "") +
       kpi("Claimed", t.claimed + " / " + t.count, "", plural(rep.claims.length, "claim")) + "</div>" +
@@ -1517,7 +1546,7 @@
 
   function makeReportPdf(m, driverUid) {
     var profile = st.user, rep;
-    if (driverUid && isAdmin()) {
+    if (driverUid && isOffice()) {
       rep = monthReport(m, st.allBills.filter(function (b) { return b.ownerUid === driverUid; }), st.all.filter(function (c) { return c.ownerUid === driverUid; }));
       profile = st.users.filter(function (u) { return u.uid === driverUid; })[0] || { name: (rep.bills[0] || {}).driverName || "" };
     } else {
@@ -1535,7 +1564,7 @@
 
   function drivers() {
     var byUid = {};
-    st.users.forEach(function (u) { if (u.role !== "admin" && !u.pending) byUid[u.uid] = { uid: u.uid, name: u.name, vehicle: u.vehicle, employeeId: u.employeeId, active: u.active !== false }; });
+    st.users.forEach(function (u) { if (!u.pending) byUid[u.uid] = { uid: u.uid, name: u.name, vehicle: u.vehicle, employeeId: u.employeeId, active: u.active !== false }; });
     st.allBills.forEach(function (b) { if (!byUid[b.ownerUid]) byUid[b.ownerUid] = { uid: b.ownerUid, name: b.driverName || "Driver", vehicle: "", active: true }; });
     return Object.keys(byUid).map(function (k) { return byUid[k]; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
   }
@@ -1545,7 +1574,7 @@
     var bills = billsWithMileage(st.allBills.filter(function (b) { return b.ownerUid === d.uid; }));
     var open = bills.filter(function (b) { return !b.claimId; });
     var monthBills = bills.filter(function (b) { return monthOf(b.date) === month; });
-    var waiting = st.all.filter(function (c) { return c.ownerUid === d.uid && (c.status === "submitted" || c.status === "approved"); });
+    var waiting = st.all.filter(function (c) { return c.ownerUid === d.uid && (c.status === "submitted" || c.status === "verified" || c.status === "approved"); });
     var last = bills[bills.length - 1];
     return {
       open: open.length, openKd: sum(open, function (b) { return Number(b.amount) || 0; }), openMileage: mileageOf(open.slice(0, CLAIM_SIZE)),
@@ -1557,11 +1586,13 @@
   function viewOfficeOnline() {
     var month = monthOf(today()), ds = drivers();
     var waiting = st.all.filter(function (c) { return c.status === "submitted"; });
+    var verified = st.all.filter(function (c) { return c.status === "verified"; });
     var toPay = st.all.filter(function (c) { return c.status === "approved"; });
-    var pending = st.users.filter(function (u) { return u.pending && u.active === false && u.role !== "admin"; });
+    var forMe = st.all.filter(function (c) { var a = claimActions(c); return a.indexOf("verify") >= 0 || a.indexOf("approve") >= 0; });
+    var pending = isAdmin() ? st.users.filter(function (u) { return u.pending && u.active === false && u.role !== "admin"; }) : [];
     var paidMonth = st.all.filter(function (c) { return c.status === "paid" && c.paidAt && monthOf(new Date(c.paidAt).toISOString()) === month; });
     var monthBills = billsWithMileage(st.allBills).filter(function (b) { return monthOf(b.date) === month; });
-    var h = '<h1>Admin dashboard</h1><p class="sub">Live from everyone using the app · ' + esc(monthLabel(month)) + "</p>";
+    var h = "<h1>" + esc(S.ROLE_LABELS[role()] || "Office") + ' dashboard</h1><p class="sub">Live from everyone using the app · ' + esc(monthLabel(month)) + "</p>";
     if (pending.length) {
       h += '<div class="card stack" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="spread"><h2>' + plural(pending.length, "person") .replace("persons", "people") + " waiting to be allowed</h2></div>" +
         pending.map(function (u) {
@@ -1572,8 +1603,9 @@
     if (st.allError) h += '<div class="banner bad" style="margin-bottom:14px">' + esc(st.allError) + "</div>";
     h += '<div class="kpis">' +
       kpi("Drivers", ds.filter(function (d) { return d.active; }).length, "", ds.filter(function (d) { return driverStats(d).open >= CLAIM_SIZE; }).length + " ready to claim") +
-      kpi("To approve", waiting.length, "", kd(sum(waiting)) + " KD", waiting.length > 0) +
-      kpi("Approved, to pay", kd(sum(toPay)), "KD", plural(toPay.length, "claim")) +
+      kpi("To verify", waiting.length, "", kd(sum(waiting)) + " KD", waiting.length > 0 && !canApprove()) +
+      kpi("Verified, to approve", verified.length, "", kd(sum(verified)) + " KD", verified.length > 0 && canApprove()) +
+      kpi("Approved, to pay", kd(sum(toPay)), "KD", plural(toPay.length, "claim")) + "</div><div class=\"kpis\" style=\"margin-top:10px\">" +
       kpi("Fuel this month", kd(sum(monthBills, function (b) { return Number(b.amount) || 0; })), "KD", plural(monthBills.length, "bill")) + "</div>";
 
     h += '<div class="section-title"><h2>Drivers</h2><span class="row"><button class="btn small" data-act="bills-csv">' + ICON.pdf + 'Bills (Excel)</button><button class="btn small" data-act="claims-csv">' + ICON.pdf + "Claims (Excel)</button></span></div>";
@@ -1590,10 +1622,10 @@
             '<td class="r">' + (x.waiting ? kd(x.waitingKd) + "<br><span class=\"sub\" style=\"font-size:12px\">" + plural(x.waiting, "claim") + "</span>" : "—") + "</td></tr>";
         }).join("") + "</tbody></table></div>";
     }
-    h += '<div class="section-title"><h2>Claims to approve</h2><a href="#/claims">All claims</a></div>';
-    h += waiting.length ? '<div class="card flush list">' + waiting.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>"
-      : '<div class="card empty"><b>Nothing to approve</b>New claims from drivers appear here straight away.</div>';
-    if (toPay.length) {
+    h += '<div class="section-title"><h2>' + (canApprove() ? "Claims to verify and approve" : "Claims to verify") + '</h2><a href="#/claims">All claims</a></div>';
+    h += forMe.length ? '<div class="card flush list">' + forMe.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>"
+      : '<div class="card empty"><b>Nothing waiting for you</b>New claims from drivers appear here straight away.</div>';
+    if (toPay.length && canApprove()) {
       h += '<div class="section-title"><h2>Approved, to pay</h2></div><div class="card flush list">' + toPay.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>";
     }
     var latest = billsWithMileage(st.allBills).slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 8);
@@ -1627,14 +1659,14 @@
   }
 
   function viewAllClaims() {
-    var f = st.filter.status, keys = ["all", "submitted", "approved", "paid", "returned", "rejected"];
+    var f = st.filter.status, keys = ["all", "submitted", "verified", "approved", "paid", "returned", "rejected"];
     var counts = {};
     st.all.forEach(function (c) { counts[c.status] = (counts[c.status] || 0) + 1; });
     var list = st.all.filter(function (c) { return f === "all" || c.status === f; });
     var h = '<div class="spread"><h1>All claims</h1><button class="btn small" data-act="claims-csv">' + ICON.pdf + "Export Excel (CSV)</button></div>" +
       '<p class="sub">' + plural(st.all.length, "claim") + " · " + kd(sum(st.all.filter(function (c) { return c.status === "paid"; }), paidAmt)) + ' KD paid</p><div class="chips" style="margin-bottom:14px">';
     keys.forEach(function (k) {
-      h += '<button class="chip' + (f === k ? " on" : "") + '" data-act="filter-status" data-v="' + k + '">' + (k === "all" ? "All" : k === "submitted" ? "To approve" : k === "approved" ? "Approved, to pay" : S.STATUS[k].label) + '<span class="n">' + (k === "all" ? st.all.length : counts[k] || 0) + "</span></button>";
+      h += '<button class="chip' + (f === k ? " on" : "") + '" data-act="filter-status" data-v="' + k + '">' + (k === "all" ? "All" : k === "submitted" ? "To verify" : k === "verified" ? "Verified, to approve" : k === "approved" ? "Approved, to pay" : S.STATUS[k].label) + '<span class="n">' + (k === "all" ? st.all.length : counts[k] || 0) + "</span></button>";
     });
     h += "</div>";
     return h + (list.length ? '<div class="card flush list">' + list.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>" : '<div class="card empty"><b>No claims</b></div>');
@@ -1682,12 +1714,12 @@
   }
 
   function exportClaimsCsv() {
-    var rows = [["Claim No", "Driver", "Employee ID", "Vehicle", "Period From", "Period To", "Submitted", "Bills", "Litres", "Amount (KD)", "Distance (km)", "Average km/L", "Status", "Approved KD", "Approved By", "Paid On", "Paid Amount (KD)", "Payment Ref", "Remarks"]];
+    var rows = [["Claim No", "Driver", "Employee ID", "Vehicle", "Period From", "Period To", "Submitted", "Bills", "Litres", "Amount (KD)", "Distance (km)", "Average km/L", "Status", "Verified By", "Approved KD", "Approved By", "Paid On", "Paid Amount (KD)", "Payment Ref", "Remarks"]];
     st.all.forEach(function (c) {
       var m = claimMileage(c);
       rows.push([c.claimNo, c.driverName, c.employeeId, c.vehicle, c.periodFrom, c.periodTo, c.submissionDate, c.totals.count, lit(c.totals.litres), kd(c.totals.amount),
         m ? m.km : "", m && m.kmpl ? m.kmpl.toFixed(1) : "", (S.STATUS[c.status] || {}).label || c.status,
-        c.approvedAt ? kd(c.amountApproved) : "", c.approvedBy || "",
+        c.verifiedBy || "", c.approvedAt ? kd(c.amountApproved) : "", c.approvedBy || "",
         c.paidAt ? new Date(c.paidAt).toISOString().slice(0, 10) : "", c.status === "paid" ? kd(paidAmt(c)) : "", c.paidRef || "", c.remarks || ""]);
     });
     saveFile(new Blob(["\ufeff" + rows.map(csvLine).join("\r\n")], { type: "text/csv" }), "Fuel claims " + today() + ".csv");
@@ -1696,7 +1728,7 @@
   // ---- upload what a driver saved on the phone before the app went online ----
 
   function uploadBanner() {
-    if (LOCAL || isAdmin() || !S.localData) return "";
+    if (LOCAL || !S.localData) return "";
     var d = S.localData();
     if (!d) return "";
     return '<div class="banner info stack" style="margin-bottom:14px"><div><b>' + plural(d.bills.length, "bill") + " and " + plural(d.claims.length, "claim") +
@@ -1726,7 +1758,7 @@
       return;
     }
     document.getElementById("demo").hidden = true;
-    if (st.user.active === false && !isAdmin()) {
+    if (st.user.active === false) {
       $main.innerHTML = st.user.pending
         ? '<div class="login"><div class="box card stack" style="text-align:center"><img src="img/logo.png" alt="EZ Storage" style="width:150px;margin:0 auto">' +
           '<h1>Waiting for approval</h1><p class="sub" style="margin:0">Your account (' + esc(st.user.email || "") + ') was created. The admin needs to allow it before you can add fuel bills. This page opens by itself once you are allowed.</p>' +
@@ -1743,12 +1775,15 @@
       case "claim": html = viewClaim(id, false); break;
       case "review": html = viewClaim(id, true); break;
       case "bills": html = viewBills(); break;
-      case "add": html = isAdmin() ? viewHome() : viewBills(); break;
+      case "add": html = viewBills(); break;
+      case "mine": html = viewHomeLocal(); break;
+      case "my-claims": html = viewClaims(); break;
+      case "my-reports": html = viewReports(id); break;
       case "all-bills": html = viewAllBills(id); break;
       case "make-claim": html = viewMakeClaim(); break;
-      case "reports": html = isAdmin() ? viewOfficeReports(id, parts[2]) : viewReports(id); break;
+      case "reports": html = isOffice() ? viewOfficeReports(id, parts[2]) : viewReports(id); break;
       case "new":
-        if (!isAdmin()) { html = viewBills(); page = "add"; break; }
+        if (true) { html = viewBills(); page = "add"; break; }
         if (!st.draft) startDraft(null);
         html = viewForm();
         break;
@@ -1804,8 +1839,8 @@
         }).catch(function (x) { el.disabled = false; toast("Couldn't make the PDF: " + x.message); });
         break;
       case "do": doAction(el.getAttribute("data-id"), el.getAttribute("data-a")); break;
-      case "mark-paid": if (LOCAL || isAdmin()) markPaid(el.getAttribute("data-id")); break;
-      case "approve": if (isAdmin()) approveSheet(el.getAttribute("data-id")); break;
+      case "mark-paid": if (LOCAL || canApprove()) markPaid(el.getAttribute("data-id")); break;
+      case "approve": if (canApprove()) approveSheet(el.getAttribute("data-id")); break;
       case "allow-user":
         S.setUser(el.getAttribute("data-uid"), { active: true, pending: false, allowedAt: Date.now(), allowedBy: st.user.name })
           .then(function () { toast("Account allowed"); }).catch(function (x) { toast(x.message); });
@@ -1885,7 +1920,7 @@
   document.addEventListener("change", function (e) {
     var t = e.target;
     if (t.hasAttribute("data-role")) {
-      S.setUser(t.getAttribute("data-role"), { role: t.value }).then(function () { toast("Role updated"); }).catch(function (x) { toast(x.message); });
+      S.setUser(t.getAttribute("data-role"), { role: t.value }).then(function () { toast("Role changed to " + (S.ROLE_LABELS[t.value] || t.value)); }).catch(function (x) { toast(x.message); });
     } else if (t.hasAttribute("data-filter") && t.tagName === "SELECT") {
       st.filter[t.getAttribute("data-filter")] = t.value;
       route();
@@ -1962,19 +1997,14 @@
     st.all = [];
     st.users = [];
     if (!st.user) return;
-    if (st.user.active === false && !isAdmin()) return; // waiting to be allowed
+    if (st.user.active === false) return; // waiting to be allowed
     st.unsub.push(S.watchClaims("mine", function (list) { st.mine = list; refresh(); }));
-    if (!isAdmin()) {
-      st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
-    } else {
+    st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
+    if (isOffice()) {
       st.unsub.push(S.watchBills(function (list) { st.allBills = list; refresh(); }, "all"));
       st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
       st.unsub.push(S.watchUsers(function (list) { st.users = list; refresh(); }));
     }
-    if (isStaff()) {
-      st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
-    }
-    if (st.user.role === "admin") st.unsub.push(S.watchUsers(function (list) { st.users = list; refresh(); }));
   }
 
   var refreshTimer;

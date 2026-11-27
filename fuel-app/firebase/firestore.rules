@@ -1,25 +1,26 @@
 rules_version = '2';
 // Security rules for the EZ Storage fuel app (online version).
-// One main admin checks everything; new accounts wait until the admin allows them.
-//   users/{uid}    role: "driver" | "admin", active (allowed), pending (new, not yet allowed)
-//   bills/{id}     one fuel bill, owned by a driver
-//   claims/{id}    a claim made from 10 bills
-//   photos/{id}    bill photos
-//   counters/{uid} each driver's claim numbering
+// Roles: driver (staff) < supervisor (verifies) < manager (approves, pays) < admin (also allows people, sets roles).
+// New accounts wait until the admin allows them. Nobody can verify or approve their own claim.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
     function active() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && me().active == true; }
-    function isAdmin() { return active() && me().role == 'admin'; }
+    function role() { return me().role; }
+    function isAdmin() { return active() && role() == 'admin'; }
+    function isOffice() { return active() && role() in ['supervisor', 'manager', 'admin']; }
+    function canApprove() { return active() && role() in ['manager', 'admin']; }
     function mine(data) { return active() && data.ownerUid == request.auth.uid; }
     function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
     function num(v) { return v is int || v is float; }
+    function was(s) { return resource.data.status == s; }
+    function now(s) { return request.resource.data.status == s; }
 
     // ---- people ----
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == uid || isOffice());
       // new accounts start as a driver waiting for the admin to allow them
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role == 'driver' && request.resource.data.active == false && request.resource.data.pending == true;
@@ -30,12 +31,12 @@ service cloud.firestore {
 
     // ---- fuel bills ----
     match /bills/{id} {
-      allow read: if mine(resource.data) || isAdmin();
+      allow read: if mine(resource.data) || isOffice();
       allow create: if mine(request.resource.data) && request.resource.data.claimId == null
         && request.resource.data.date is string && num(request.resource.data.odometer)
         && num(request.resource.data.litres) && request.resource.data.litres > 0
         && num(request.resource.data.amount) && request.resource.data.amount > 0;
-      // a driver edits a bill only until it is claimed; after that only its claim link can change
+      // the owner edits a bill only until it is claimed; after that only its claim link can change
       allow update: if mine(resource.data) && request.resource.data.ownerUid == request.auth.uid
         && (resource.data.claimId == null || changes().hasOnly(['claimId', 'updatedAt']));
       allow delete: if (mine(resource.data) && resource.data.claimId == null) || isAdmin();
@@ -43,18 +44,32 @@ service cloud.firestore {
 
     // ---- claims ----
     match /claims/{id} {
-      allow read: if mine(resource.data) || isAdmin();
+      allow read: if mine(resource.data) || isOffice();
       allow create: if mine(request.resource.data) && request.resource.data.status == 'submitted'
-        && !request.resource.data.keys().hasAny(['paidAt', 'paidAmount', 'paidRef', 'paidBy']);
-      // only the admin approves, returns, rejects and marks claims paid
-      allow update: if isAdmin();
-      // a driver can withdraw a claim before it is approved, or after it was returned; its bills go back to the list
+        && !request.resource.data.keys().hasAny(['verifiedAt', 'approvedAt', 'paidAt', 'paidAmount', 'paidRef', 'paidBy']);
+
+      // office decisions; never on your own claim, and the bills inside a claim never change
+      function notOwn() { return resource.data.ownerUid != request.auth.uid; }
+      function billsKept() { return !changes().hasAny(['ownerUid', 'receipts', 'billIds', 'totals', 'driverSignature', 'mileage', 'claimNo']); }
+      function supervisorStep() {
+        return was('submitted') && (now('verified') || now('returned'))
+          && changes().hasOnly(['status', 'verifiedBy', 'verifiedByUid', 'verifiedAt', 'remarks', 'history', 'updatedAt']);
+      }
+      function managerStep() {
+        return ((was('submitted') || was('verified')) && (now('verified') || now('approved') || now('returned') || now('rejected')))
+          || (was('approved') && now('paid'))
+          || (was('paid') && now('approved'));
+      }
+      allow update: if isOffice() && notOwn() && billsKept()
+        && ((role() == 'supervisor' && supervisorStep()) || (canApprove() && managerStep()) || isAdmin());
+
+      // the owner can withdraw a claim before anyone checks it, or after it was returned; its bills go back to the list
       allow delete: if (mine(resource.data) && resource.data.status in ['submitted', 'returned']) || isAdmin();
     }
 
     // ---- bill photos ----
     match /photos/{id} {
-      allow read: if mine(resource.data) || isAdmin();
+      allow read: if mine(resource.data) || isOffice();
       allow create: if mine(request.resource.data) && request.resource.data.data is string
         && request.resource.data.data.size() < 1000000;
       allow delete: if mine(resource.data) || isAdmin();

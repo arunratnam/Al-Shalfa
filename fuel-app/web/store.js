@@ -11,7 +11,7 @@
   "use strict";
 
   var ROLES = ["driver", "verifier", "approver", "admin"];
-  var ROLE_LABELS = { driver: "Driver", verifier: "Verifier", approver: "Approver", admin: "Administrator" };
+  var ROLE_LABELS = { driver: "Driver / Staff", supervisor: "Supervisor", manager: "Manager", admin: "Admin", verifier: "Verifier", approver: "Approver" };
   var STATUS = {
     draft: { label: "Draft", tone: "muted" },
     submitted: { label: "Submitted", tone: "info" },
@@ -446,7 +446,7 @@
 
     var store = {
       mode: "firebase",
-      ROLES: ["driver", "admin"],
+      ROLES: ["driver", "supervisor", "manager", "admin"],
       init: function () {
         firebase.initializeApp(cfg);
         auth = firebase.auth();
@@ -614,12 +614,24 @@
       act: function (claim, action, data) {
         var c = clean(claim), id = c.id;
         data = data || {};
-        if (action === "approve") {
-          // the admin checks the bills and approves: fills "Verified by" and "Approved by" on the form
+        if (action === "verify") {
+          // a supervisor (or manager) has checked the bills: fills "Verified by" on the form
+          c.status = "verified";
+          c.verifiedBy = current.name;
+          c.verifiedByUid = current.uid;
+          c.verifiedAt = now();
+          if (data.note) c.remarks = data.note;
+        } else if (action === "approve") {
+          // the manager approves; if nobody verified it first, the manager counts as the verifier too
           c.status = "approved";
-          c.verifiedBy = c.approvedBy = current.name;
-          c.verifiedByUid = c.approvedByUid = current.uid;
-          c.verifiedAt = c.approvedAt = now();
+          if (!c.verifiedAt) {
+            c.verifiedBy = current.name;
+            c.verifiedByUid = current.uid;
+            c.verifiedAt = now();
+          }
+          c.approvedBy = current.name;
+          c.approvedByUid = current.uid;
+          c.approvedAt = now();
           c.amountApproved = Number(data.amountApproved);
           c.approverSignature = data.signature || "";
           c.remarks = data.note || "";
