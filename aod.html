@@ -1,197 +1,372 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#000000">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <title>Always On Display</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body {
-            height: 100%;
-            background: #000;
-            color: #e6e6e6;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-            overflow: hidden;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        #screen {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 16px;
-            text-align: center;
-            transition: transform 2s ease;
-        }
-        #time {
-            font-size: clamp(64px, 22vw, 160px);
-            font-weight: 200;
-            letter-spacing: -2px;
-            font-variant-numeric: tabular-nums;
-        }
-        #date {
-            font-size: clamp(16px, 4.5vw, 24px);
-            color: #8a8a8a;
-        }
-        #task {
-            margin-top: 24px;
-            max-width: 90vw;
-            font-size: clamp(20px, 6vw, 34px);
-            color: #7fd1ff;
-            word-wrap: break-word;
-            cursor: pointer;
-        }
-        #task.empty { color: #444; font-size: 18px; }
-        #hint {
-            position: fixed;
-            bottom: max(16px, env(safe-area-inset-bottom));
-            left: 0; right: 0;
-            text-align: center;
-            font-size: 13px;
-            color: #333;
-        }
-        body.dim #screen { opacity: 0.55; }
-        #editor {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.92);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 16px;
-        }
-        #editor.open { display: flex; }
-        #editor input {
-            width: 100%;
-            max-width: 480px;
-            padding: 14px;
-            font-size: 18px;
-            border-radius: 10px;
-            border: 1px solid #333;
-            background: #111;
-            color: #fff;
-            user-select: text;
-            -webkit-user-select: text;
-        }
-        #editor .row { display: flex; gap: 10px; }
-        #editor button {
-            padding: 12px 20px;
-            font-size: 16px;
-            border-radius: 10px;
-            border: 0;
-            background: #1e88e5;
-            color: #fff;
-        }
-        #editor button.secondary { background: #333; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Always On Display</title>
+<meta name="theme-color" content="#000000">
+<style>
+    /* Layout: black clock face fills the screen; a floating, draggable task window sits on top. */
+    :root {
+        color-scheme: dark;
+        --bg: #000;
+        --fg: #e8ebef;
+        --muted: #7c8590;
+        --faint: #2a3038;
+        --panel: #12161b;
+        --panel-2: #1a2027;
+        --accent: #6cc4ff;
+        --done: #5fd39a;
+        --danger: #ff7a7a;
+        --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --display: "Space Grotesk", var(--font);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+        height: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font);
+        overflow: hidden;
+        -webkit-tap-highlight-color: transparent;
+    }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---------- Clock face ---------- */
+    #face {
+        position: fixed; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 8px; text-align: center; user-select: none; -webkit-user-select: none;
+        transition: transform 2s ease, opacity .3s;
+    }
+    #time {
+        font-family: var(--display);
+        font-size: clamp(56px, 18vw, 170px);
+        font-weight: 300; letter-spacing: -2px;
+        font-variant-numeric: tabular-nums;
+    }
+    #date { font-size: clamp(15px, 4.5vw, 22px); color: var(--muted); }
+    #summary { margin-top: 10px; font-size: 15px; color: var(--accent); min-height: 1.2em; }
+    body.dim #face, body.dim #win { opacity: .45; }
+    #hint {
+        position: fixed; left: 0; right: 0;
+        bottom: 0; padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+        text-align: center; font-size: 12px; color: #3a414a; pointer-events: none;
+    }
+
+    /* ---------- Floating window ---------- */
+    #win {
+        position: fixed; z-index: 5;
+        width: min(360px, calc(100vw - 24px));
+        max-height: 70vh;
+        display: flex; flex-direction: column;
+        background: var(--panel);
+        border: 1px solid var(--faint);
+        border-radius: 16px;
+        box-shadow: 0 18px 50px rgba(0,0,0,.6);
+        overflow: hidden;
+        transition: opacity .3s;
+    }
+    #bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 8px 10px 14px;
+        background: var(--panel-2);
+        cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+    }
+    #bar.dragging { cursor: grabbing; }
+    .grip { width: 14px; display: grid; grid-template-columns: repeat(2, 3px); gap: 3px; opacity: .5; }
+    .grip i { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); }
+    #title { flex: 1; font-family: var(--display); font-weight: 600; font-size: 15px; }
+    #count {
+        font-size: 12px; font-variant-numeric: tabular-nums;
+        padding: 2px 8px; border-radius: 999px; background: var(--faint); color: var(--muted);
+    }
+    .wbtn {
+        width: 32px; height: 32px; border-radius: 8px;
+        display: grid; place-items: center; color: var(--muted);
+    }
+    .wbtn:hover, .wbtn:active { background: var(--faint); color: var(--fg); }
+    .wbtn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+    #body { display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; flex: 1; }
+    #add { display: flex; gap: 8px; }
+    #newTask {
+        flex: 1; min-width: 0;
+        padding: 10px 12px; font-size: 15px;
+        background: var(--bg); color: var(--fg);
+        border: 1px solid var(--faint); border-radius: 10px;
+    }
+    #addBtn {
+        padding: 0 14px; border-radius: 10px;
+        background: var(--accent); color: #001a2b; font-weight: 600;
+    }
+    #filters { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+        padding: 5px 12px; border-radius: 999px; font-size: 13px;
+        border: 1px solid var(--faint); color: var(--muted);
+    }
+    .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+    #list { list-style: none; overflow-y: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    #list li {
+        display: flex; align-items: center; gap: 10px;
+        padding: 9px 6px; border-radius: 10px;
+    }
+    #list li:hover { background: var(--panel-2); }
+    #list input[type=checkbox] {
+        appearance: none; -webkit-appearance: none; flex: none;
+        width: 22px; height: 22px; border-radius: 6px;
+        border: 2px solid var(--muted); display: grid; place-items: center; cursor: pointer;
+    }
+    #list input[type=checkbox]:checked { background: var(--done); border-color: var(--done); }
+    #list input[type=checkbox]:checked::after {
+        content: ""; width: 6px; height: 11px; margin-top: -2px;
+        border: solid #062014; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg);
+    }
+    #list .txt { flex: 1; min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+    #list li.done .txt { color: var(--muted); text-decoration: line-through; }
+    #list .del { width: 28px; height: 28px; border-radius: 6px; color: var(--muted); opacity: .6; }
+    #list .del:hover { color: var(--danger); opacity: 1; }
+    #empty { color: var(--muted); font-size: 14px; text-align: center; padding: 18px 0; }
+    #foot {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 12px; color: var(--muted); padding-top: 6px; border-top: 1px solid var(--faint);
+    }
+    #clearDone { font-size: 12px; color: var(--muted); padding: 4px 6px; border-radius: 6px; }
+    #clearDone:hover { color: var(--danger); }
+    #progress { height: 3px; background: var(--faint); }
+    #progress span { display: block; height: 100%; width: 0; background: var(--done); transition: width .3s; }
+
+    /* Minimised: just the title bar as a small pill */
+    #win.min { width: auto; border-radius: 999px; }
+    #win.min #body, #win.min #progress { display: none; }
+    #win.min #bar { padding: 6px 6px 6px 14px; }
+
+    /* Maximised: fills the screen */
+    #win.max {
+        left: 0 !important; top: 0 !important;
+        width: 100vw; height: 100%; max-height: none;
+        border-radius: 0; border: 0;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    #win.max #bar { cursor: default; padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+    #win.max #body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+    #win.max #list .txt { font-size: 18px; }
+
+    @media (prefers-reduced-motion: reduce) { #face, #progress span { transition: none; } }
+</style>
 </head>
 <body>
-    <div id="screen">
-        <div id="time">--:--</div>
-        <div id="date"></div>
-        <div id="task" class="empty">Tap here to set your task</div>
-    </div>
-    <div id="hint">Tap screen to keep awake · double-tap to dim · tap task to edit</div>
 
-    <div id="editor">
-        <input id="taskInput" type="text" maxlength="120" placeholder="What are you working on?">
-        <div class="row">
-            <button id="save">Save</button>
-            <button id="clear" class="secondary">Clear</button>
-            <button id="cancel" class="secondary">Cancel</button>
+<div id="face">
+    <div id="time">--:--</div>
+    <div id="date"></div>
+    <div id="summary"></div>
+</div>
+<div id="hint">Tap the clock to keep the screen on · double-tap to dim · drag the window by its top bar</div>
+
+<section id="win" aria-label="Task window">
+    <div id="bar">
+        <div class="grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div id="title">Tasks</div>
+        <span id="count">0/0</span>
+        <button class="wbtn" id="minBtn" aria-label="Minimise" title="Minimise">
+            <svg viewBox="0 0 16 16"><path d="M3 12h10"/></svg>
+        </button>
+        <button class="wbtn" id="maxBtn" aria-label="Maximise" title="Maximise">
+            <svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>
+        </button>
+    </div>
+    <div id="progress"><span></span></div>
+    <div id="body">
+        <form id="add" autocomplete="off">
+            <input id="newTask" type="text" maxlength="140" placeholder="Add a task…" aria-label="New task">
+            <button id="addBtn" type="submit">Add</button>
+        </form>
+        <div id="filters" role="group" aria-label="Show">
+            <button class="chip" data-f="all" aria-pressed="true">All</button>
+            <button class="chip" data-f="active" aria-pressed="false">To do</button>
+            <button class="chip" data-f="done" aria-pressed="false">Done</button>
+        </div>
+        <ul id="list"></ul>
+        <div id="empty" hidden>No tasks here. Add one above.</div>
+        <div id="foot">
+            <span id="left">0 left</span>
+            <button id="clearDone" type="button">Clear done</button>
         </div>
     </div>
+</section>
 
-    <script>
-        const $ = (id) => document.getElementById(id);
-        const timeEl = $("time"), dateEl = $("date"), taskEl = $("task");
-        const editor = $("editor"), input = $("taskInput"), hint = $("hint");
+<script>
+const $ = (id) => document.getElementById(id);
+const win = $("win"), bar = $("bar"), list = $("list");
 
-        // ---- Clock ----
-        function tick() {
-            const now = new Date();
-            timeEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-            dateEl.textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+/* ---------- storage (this phone only) ---------- */
+const KEY = "aod-v2";
+function loadState() {
+    try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && Array.isArray(s.tasks)) return s; } catch (e) {}
+    return {
+        tasks: [
+            { id: 1, text: "Example: Morning walk", done: true },
+            { id: 2, text: "Example: Reply to emails", done: false },
+            { id: 3, text: "Example: Buy groceries", done: false }
+        ],
+        filter: "all", mode: "normal", pos: null
+    };
+}
+let state = loadState();
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+/* ---------- clock ---------- */
+function tick() {
+    const now = new Date();
+    $("time").textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    $("date").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+}
+tick(); setInterval(tick, 1000);
+
+/* ---------- tasks ---------- */
+function render() {
+    const total = state.tasks.length, done = state.tasks.filter(t => t.done).length;
+    $("count").textContent = `${done}/${total}`;
+    $("left").textContent = `${total - done} left`;
+    $("progress").firstElementChild.style.width = total ? (done / total * 100) + "%" : "0";
+    const next = state.tasks.find(t => !t.done);
+    $("summary").textContent = next ? "Next: " + next.text : (total ? "All tasks done ✓" : "");
+
+    document.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", c.dataset.f === state.filter));
+    const shown = state.tasks.filter(t => state.filter === "all" || (state.filter === "done" ? t.done : !t.done));
+    list.innerHTML = "";
+    for (const t of shown) {
+        const li = document.createElement("li");
+        li.className = t.done ? "done" : "";
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.checked = t.done; cb.id = "t" + t.id;
+        cb.onchange = () => { t.done = cb.checked; save(); render(); };
+        const lbl = document.createElement("label");
+        lbl.className = "txt"; lbl.htmlFor = cb.id; lbl.textContent = t.text;
+        const del = document.createElement("button");
+        del.className = "del"; del.type = "button"; del.textContent = "✕";
+        del.setAttribute("aria-label", "Delete " + t.text);
+        del.onclick = () => { state.tasks = state.tasks.filter(x => x !== t); save(); render(); };
+        li.append(cb, lbl, del);
+        list.append(li);
+    }
+    $("empty").hidden = shown.length > 0;
+}
+$("add").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const v = $("newTask").value.trim();
+    if (!v) return;
+    state.tasks.push({ id: Date.now(), text: v, done: false });
+    $("newTask").value = "";
+    if (state.filter === "done") state.filter = "all";
+    save(); render();
+});
+document.querySelectorAll(".chip").forEach(c => c.onclick = () => { state.filter = c.dataset.f; save(); render(); });
+$("clearDone").onclick = () => { state.tasks = state.tasks.filter(t => !t.done); save(); render(); };
+
+/* ---------- window: position, drag, min / max ---------- */
+function clamp() {
+    if (win.classList.contains("max")) return;
+    const r = win.getBoundingClientRect();
+    const x = Math.min(Math.max(8, r.left), window.innerWidth - r.width - 8);
+    const y = Math.min(Math.max(8, r.top), window.innerHeight - r.height - 8);
+    win.style.left = Math.max(8, x) + "px";
+    win.style.top = Math.max(8, y) + "px";
+}
+function place() {
+    if (state.pos) { win.style.left = state.pos.x + "px"; win.style.top = state.pos.y + "px"; }
+    else {
+        win.style.left = Math.max(8, (window.innerWidth - win.offsetWidth) / 2) + "px";
+        win.style.top = Math.max(8, window.innerHeight - win.offsetHeight - 60) + "px";
+    }
+    clamp();
+}
+const ICON_MAX = '<svg viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg>';
+const ICON_RESTORE = '<svg viewBox="0 0 16 16"><rect x="3" y="5" width="8" height="8" rx="1.5"/><path d="M6 5V3.5A.5.5 0 0 1 6.5 3H12.5a.5.5 0 0 1 .5.5V9.5a.5.5 0 0 1-.5.5H11"/></svg>';
+const ICON_MIN = '<svg viewBox="0 0 16 16"><path d="M3 12h10"/></svg>';
+const ICON_OPEN = '<svg viewBox="0 0 16 16"><path d="M4 10l4-4 4 4"/></svg>';
+function setMode(m) {
+    state.mode = m;
+    win.classList.toggle("min", m === "min");
+    win.classList.toggle("max", m === "max");
+    $("maxBtn").innerHTML = m === "max" ? ICON_RESTORE : ICON_MAX;
+    $("maxBtn").setAttribute("aria-label", m === "max" ? "Restore" : "Maximise");
+    $("minBtn").innerHTML = m === "min" ? ICON_OPEN : ICON_MIN;
+    $("minBtn").setAttribute("aria-label", m === "min" ? "Open" : "Minimise");
+    $("minBtn").title = $("minBtn").getAttribute("aria-label");
+    $("maxBtn").title = $("maxBtn").getAttribute("aria-label");
+    if (m !== "max") place();
+    save();
+}
+$("minBtn").onclick = (e) => { e.stopPropagation(); setMode(state.mode === "min" ? "normal" : "min"); };
+$("maxBtn").onclick = (e) => { e.stopPropagation(); setMode(state.mode === "max" ? "normal" : "max"); };
+bar.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) setMode(state.mode === "max" ? "normal" : "max"); });
+
+let drag = null;
+bar.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button") || win.classList.contains("max")) return;
+    const r = win.getBoundingClientRect();
+    drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+    bar.setPointerCapture(e.pointerId);
+    bar.classList.add("dragging");
+});
+bar.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    win.style.left = (e.clientX - drag.dx) + "px";
+    win.style.top = (e.clientY - drag.dy) + "px";
+    clamp();
+});
+function endDrag() {
+    if (!drag) return;
+    drag = null; bar.classList.remove("dragging");
+    const r = win.getBoundingClientRect();
+    state.pos = { x: Math.round(r.left), y: Math.round(r.top) };
+    save();
+}
+bar.addEventListener("pointerup", endDrag);
+bar.addEventListener("pointercancel", endDrag);
+window.addEventListener("resize", clamp);
+
+/* ---------- keep screen on ---------- */
+let lock = null;
+async function keepAwake() {
+    try {
+        if ("wakeLock" in navigator && !lock && document.visibilityState === "visible") {
+            lock = await navigator.wakeLock.request("screen");
+            lock.addEventListener("release", () => { lock = null; });
+            $("hint").textContent = "Screen stays on · double-tap the clock to dim · drag the window by its top bar";
         }
-        tick();
-        setInterval(tick, 1000);
+    } catch (e) {
+        $("hint").textContent = "Couldn't keep the screen on. Set screen timeout to max in phone settings.";
+    }
+}
+keepAwake();
+document.addEventListener("pointerdown", keepAwake);
+document.addEventListener("visibilitychange", keepAwake);
 
-        // ---- Task (saved on this phone) ----
-        function load() {
-            try { return localStorage.getItem("aod-task") || ""; } catch (e) { return ""; }
-        }
-        function store(v) {
-            try { localStorage.setItem("aod-task", v); } catch (e) {}
-        }
-        function render(v) {
-            if (v) { taskEl.textContent = v; taskEl.classList.remove("empty"); }
-            else { taskEl.textContent = "Tap here to set your task"; taskEl.classList.add("empty"); }
-        }
-        render(load());
+let fsTried = false, lastTap = 0;
+$("face").addEventListener("click", () => {
+    if (!fsTried && document.documentElement.requestFullscreen) {
+        fsTried = true; document.documentElement.requestFullscreen().catch(() => {});
+    }
+    const t = Date.now();
+    if (t - lastTap < 350) document.body.classList.toggle("dim");
+    lastTap = t;
+});
 
-        taskEl.addEventListener("click", (e) => {
-            e.stopPropagation();
-            input.value = load();
-            editor.classList.add("open");
-            input.focus();
-        });
-        $("save").onclick = () => { store(input.value.trim()); render(input.value.trim()); editor.classList.remove("open"); };
-        $("clear").onclick = () => { store(""); render(""); editor.classList.remove("open"); };
-        $("cancel").onclick = () => editor.classList.remove("open");
-        input.addEventListener("keydown", (e) => { if (e.key === "Enter") $("save").click(); });
+/* burn-in protection: nudge the clock every minute */
+setInterval(() => {
+    const x = Math.round((Math.random() - .5) * 30), y = Math.round((Math.random() - .5) * 50);
+    $("face").style.transform = `translate(${x}px, ${y}px)`;
+}, 60000);
 
-        // ---- Keep the screen on (Wake Lock API) ----
-        let wakeLock = null;
-        async function keepAwake() {
-            try {
-                if ("wakeLock" in navigator && !wakeLock) {
-                    wakeLock = await navigator.wakeLock.request("screen");
-                    wakeLock.addEventListener("release", () => { wakeLock = null; });
-                    hint.textContent = "Screen will stay on · double-tap to dim · tap task to edit";
-                }
-            } catch (e) {
-                hint.textContent = "Couldn't keep screen on — set screen timeout to max in phone settings";
-            }
-        }
-        if (!("wakeLock" in navigator)) {
-            hint.textContent = "Your browser can't keep the screen on — set screen timeout to max";
-        }
-        keepAwake();
-        document.addEventListener("click", keepAwake);
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible") keepAwake();
-        });
-
-        // Fullscreen on first tap (where supported)
-        document.addEventListener("click", () => {
-            const el = document.documentElement;
-            if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {});
-        }, { once: true });
-
-        // Double-tap to dim
-        let lastTap = 0;
-        $("screen").addEventListener("click", () => {
-            const t = Date.now();
-            if (t - lastTap < 350) document.body.classList.toggle("dim");
-            lastTap = t;
-        });
-
-        // ---- Burn-in protection: nudge content slightly every minute ----
-        setInterval(() => {
-            const x = Math.round((Math.random() - 0.5) * 30);
-            const y = Math.round((Math.random() - 0.5) * 60);
-            $("screen").style.transform = `translate(${x}px, ${y}px)`;
-        }, 60000);
-    </script>
+render();
+setMode(state.mode || "normal");
+</script>
 </body>
 </html>
