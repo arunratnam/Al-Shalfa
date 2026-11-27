@@ -83,7 +83,20 @@ public class OverlayService extends Service {
         filter = store.getString("filter", "all");
         keepOn = store.getBool("keepOn", true);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        startForeground(NOTIF_ID, buildNotification());
+    }
+
+    /** Keeps the app running in the background so the window isn't closed. */
+    private void goForeground() {
+        try {
+            if (Build.VERSION.SDK_INT >= 34) {
+                startForeground(NOTIF_ID, buildNotification(),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            } else {
+                startForeground(NOTIF_ID, buildNotification());
+            }
+        } catch (Exception ignored) {
+            // Android may refuse this when restarting in the background; the window still shows.
+        }
     }
 
     @Override
@@ -100,6 +113,7 @@ public class OverlayService extends Service {
         if (!shown) {
             buildWindow();
         }
+        goForeground();
         if (ACTION_SHOW.equals(action) && "min".equals(mode)) {
             setMode("normal");
         } else if (ACTION_MIN.equals(action)) {
