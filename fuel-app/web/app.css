@@ -389,3 +389,6 @@ td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
 .meter.small-meter { height: 6px; width: 110px; margin-bottom: 3px; }
 td a { color: var(--fg); text-decoration: none; }
 td a:hover b { color: var(--brand); }
+
+/* iPhone zooms into form controls smaller than 16px */
+.side select, .item select { font-size: 16px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }

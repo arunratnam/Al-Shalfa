@@ -129,7 +129,19 @@
     return anchorSave(blob, filename);
   }
 
+  /** iPhone / iPad: a Home Screen app has no back button, so files go through the share sheet ("Save to Files"). */
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
   function anchorSave(blob, filename) {
+    if (isIOS() && !window.EZAndroid) {
+      var f;
+      try { f = new File([blob], filename, { type: blob.type }); } catch (e) { f = null; }
+      if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
+        return navigator.share({ files: [f], title: filename }).catch(function () {});
+      }
+    }
     if (window.EZAndroid && window.EZAndroid.saveFile) {
       return blobToBase64(blob).then(function (b64) {
         var ok = window.EZAndroid.saveFile(b64, filename, blob.type || "application/octet-stream");
