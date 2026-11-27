@@ -378,35 +378,24 @@
 
   // ------------------------------------------------------------------ Firebase store
 
+  /**
+   * Online store (Firebase Auth + Cloud Firestore). Drivers keep their own bills and claims;
+   * the office (role "admin") sees everyone's. Photos are stored in Firestore so the free plan is enough.
+   *   users/{uid}    profile, role (driver | admin), signature
+   *   bills/{id}     ownerUid, date, station, odometer, litres, amount, photoId, claimId
+   *   claims/{id}    ownerUid, claimNo, receipts, billIds, mileage, status (submitted | paid)
+   *   photos/{id}    ownerUid, data (JPEG data URL)
+   *   counters/{uid} next claim number for that driver
+   */
   function FirebaseStore(cfg) {
-    var app, auth, db;
+    var auth, db;
     var current = null;
     var authCbs = [];
-
-    function profileOf(user) {
-      return db.collection("users").doc(user.uid).get().then(function (snap) {
-        if (snap.exists) {
-          var p = snap.data();
-          p.uid = user.uid;
-          return p;
-        }
-        var pending = JSON.parse(sessionStorage.getItem("ezfuel-signup") || "{}");
-        var p2 = {
-          name: pending.name || user.email.split("@")[0], email: user.email,
-          employeeId: pending.employeeId || "", department: pending.department || "", vehicle: pending.vehicle || "",
-          role: "driver", active: true, createdAt: now()
-        };
-        return db.collection("users").doc(user.uid).set(p2).then(function () {
-          sessionStorage.removeItem("ezfuel-signup");
-          p2.uid = user.uid;
-          return p2;
-        });
-      });
-    }
 
     function friendly(e) {
       var m = {
         "auth/invalid-credential": "Wrong email or password.",
+        "auth/invalid-login-credentials": "Wrong email or password.",
         "auth/wrong-password": "Wrong email or password.",
         "auth/user-not-found": "No account with that email. Create one first.",
         "auth/email-already-in-use": "An account with this email already exists. Sign in instead.",
@@ -419,15 +408,47 @@
       return new Error(m[e && e.code] || (e && e.message) || "Something went wrong.");
     }
 
-    function clean(obj) {
-      return JSON.parse(JSON.stringify(obj));
+    function clean(o) {
+      return JSON.parse(JSON.stringify(o));
     }
 
-    return {
+    function list(snap) {
+      return snap.docs.map(function (d) {
+        var x = d.data();
+        x.id = d.id;
+        return x;
+      });
+    }
+
+    function profileOf(user) {
+      return db.collection("users").doc(user.uid).get().then(function (snap) {
+        if (snap.exists) {
+          var p = snap.data();
+          p.uid = user.uid;
+          return p;
+        }
+        var f = JSON.parse(sessionStorage.getItem("ezfuel-signup") || "{}");
+        var p2 = {
+          name: f.name || user.email.split("@")[0], email: user.email, employeeId: f.employeeId || "",
+          department: f.department || "", vehicle: f.vehicle || "", role: "driver", active: false, pending: true, createdAt: now()
+        };
+        return db.collection("users").doc(user.uid).set(p2).then(function () {
+          sessionStorage.removeItem("ezfuel-signup");
+          p2.uid = user.uid;
+          return p2;
+        });
+      });
+    }
+
+    function tellAuth() {
+      authCbs.forEach(function (cb) { cb(current); });
+    }
+
+    var store = {
       mode: "firebase",
-      ROLES: ROLES,
+      ROLES: ["driver", "admin"],
       init: function () {
-        app = firebase.initializeApp(cfg);
+        firebase.initializeApp(cfg);
         auth = firebase.auth();
         db = firebase.firestore();
         if ((window.EZ_CONFIG || {}).useEmulators) {
@@ -436,6 +457,7 @@
           db.useEmulator("localhost", 8080);
         }
         try {
+          // keeps working without signal; changes upload when back online
           db.enablePersistence({ synchronizeTabs: true }).catch(function () {});
         } catch (e) {}
         return Promise.resolve();
@@ -451,6 +473,19 @@
           profileOf(user).then(function (p) {
             current = p;
             cb(p);
+            // follow changes to the account (e.g. the admin allows it) while the app is open
+            if (store.unwatchMe) store.unwatchMe();
+            store.unwatchMe = db.collection("users").doc(user.uid).onSnapshot(function (s) {
+              if (!s.exists || !current || current.uid !== user.uid) return;
+              var x = s.data();
+              x.uid = user.uid;
+              if (x.active !== current.active || x.role !== current.role || x.pending !== current.pending) {
+                current = x;
+                cb(x);
+              } else {
+                current = x;
+              }
+            }, function () {});
           }).catch(function () {
             current = null;
             cb(null);
@@ -468,97 +503,240 @@
         return auth.sendPasswordResetEmail(email).catch(function (e) { throw friendly(e); });
       },
       signOut: function () {
+        if (store.unwatchMe) store.unwatchMe();
+        store.unwatchMe = null;
         return auth.signOut();
       },
-      updateProfile: function (fields) {
+      updateProfile: function (f) {
         var allowed = {};
-        ["name", "employeeId", "department", "vehicle"].forEach(function (k) {
-          if (k in fields) allowed[k] = fields[k];
-        });
+        ["name", "employeeId", "department", "vehicle", "signature"].forEach(function (k) { if (k in f) allowed[k] = f[k]; });
         return db.collection("users").doc(current.uid).update(allowed).then(function () {
           for (var k in allowed) current[k] = allowed[k];
-          authCbs.forEach(function (cb) { cb(current); });
+          tellAuth();
           return current;
         }).catch(function (e) { throw friendly(e); });
       },
+
+      // ---- live lists ----
       watchClaims: function (scope, cb) {
-        var q = scope === "all"
-          ? db.collection("claims").where("status", "in", ["submitted", "verified", "approved", "paid", "returned", "rejected"])
-          : db.collection("claims").where("ownerUid", "==", current.uid);
+        var q = scope === "all" ? db.collection("claims") : db.collection("claims").where("ownerUid", "==", current.uid);
         return q.onSnapshot(function (snap) {
-          var list = snap.docs.map(function (d) {
-            var c = d.data();
-            c.id = d.id;
-            return c;
-          }).sort(function (a, b) {
-            return (b.updatedAt || 0) - (a.updatedAt || 0);
-          });
-          cb(list);
-        }, function (e) {
-          cb([], friendly(e));
-        });
+          cb(list(snap).sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); }));
+        }, function (e) { cb([], friendly(e)); });
       },
+      watchBills: function (cb, scope) {
+        var q = scope === "all" ? db.collection("bills") : db.collection("bills").where("ownerUid", "==", current.uid);
+        return q.onSnapshot(function (snap) { cb(list(snap)); }, function (e) { cb([], friendly(e)); });
+      },
+      watchUsers: function (cb) {
+        return db.collection("users").onSnapshot(function (snap) {
+          cb(snap.docs.map(function (d) { var u = d.data(); u.uid = d.id; return u; }));
+        }, function () { cb([]); });
+      },
+      setUser: function (uid, fields) {
+        return db.collection("users").doc(uid).update(fields).catch(function (e) { throw friendly(e); });
+      },
+
+      // ---- bills ----
+      saveBill: function (bill) {
+        var b = clean(bill);
+        var ref = b.id ? db.collection("bills").doc(b.id) : db.collection("bills").doc();
+        if (!b.id) {
+          b.createdAt = now();
+          b.claimId = null;
+          b.ownerUid = current.uid;
+        }
+        b.driverName = current.name;
+        b.updatedAt = now();
+        delete b.id;
+        return ref.set(b).then(function () { b.id = ref.id; return b; }).catch(function (e) { throw friendly(e); });
+      },
+      deleteBill: function (id) {
+        var ref = db.collection("bills").doc(id);
+        return ref.get().then(function (s) {
+          if (!s.exists) return;
+          if (s.data().claimId) throw new Error("This bill is part of a claim. Delete the claim first.");
+          var pid = s.data().photoId;
+          return ref.delete().then(function () {
+            if (pid) db.collection("photos").doc(pid).delete().catch(function () {});
+          });
+        }).catch(function (e) { throw e.code ? friendly(e) : e; });
+      },
+
+      // ---- claims ----
       newClaimNo: function () {
-        var ref = db.collection("counters").doc("claims");
-        var year = new Date().getFullYear();
+        var ref = db.collection("counters").doc(current.uid), year = new Date().getFullYear();
+        var emp = String(current.employeeId || "").replace(/[^A-Za-z0-9-]/g, "").toUpperCase();
         return db.runTransaction(function (tx) {
           return tx.get(ref).then(function (s) {
-            var n = (s.exists && s.data().year === year ? s.data().next : 1);
-            tx.set(ref, { next: n + 1, year: year });
+            var n = s.exists && s.data().year === year ? s.data().next : 1;
+            tx.set(ref, { year: year, next: n + 1 });
             return n;
           });
         }).then(function (n) {
-          return "EZ-FUEL-" + year + "-" + ("000" + n).slice(-4);
-        }).catch(function () {
-          return "EZ-FUEL-" + year + "-" + String(now()).slice(-6);
+          return "FUEL-" + (emp ? emp + "-" : "") + year + "-" + ("00" + n).slice(-3);
         });
       },
-      saveClaim: function (claim) {
-        claim.updatedAt = now();
-        claim.totals = totals(claim.receipts);
-        var ref = claim.id ? db.collection("claims").doc(claim.id) : db.collection("claims").doc();
-        if (!claim.id) {
-          claim.id = ref.id;
-          claim.createdAt = now();
-        }
-        var data = clean(claim);
-        delete data.id;
-        return ref.set(data).then(function () { return claim; }).catch(function (e) { throw friendly(e); });
+      /** Creates the claim and marks its bills as claimed in one go. */
+      createClaim: function (billIds, extra, bills) {
+        var chosen = bills.filter(function (b) { return billIds.indexOf(b.id) >= 0 && !b.claimId; })
+          .sort(function (a, b) { return (a.date || "").localeCompare(b.date || "") || (Number(a.odometer) || 0) - (Number(b.odometer) || 0); });
+        if (!chosen.length) return Promise.reject(new Error("No bills to claim."));
+        return this.newClaimNo().then(function (no) {
+          var t = now(), ref = db.collection("claims").doc();
+          var c = {
+            claimNo: no, ownerUid: current.uid, driverName: current.name, employeeId: current.employeeId || "", department: current.department || "",
+            vehicle: current.vehicle || "", periodFrom: chosen[0].date, periodTo: chosen[chosen.length - 1].date,
+            submissionDate: new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 10),
+            receipts: chosen.map(function (b) { return { id: b.id, date: b.date, station: b.station, odometer: b.odometer, litres: b.litres, amount: b.amount, photoId: b.photoId || "" }; }),
+            billIds: chosen.map(function (b) { return b.id; }), declaration: true, driverSignature: (extra && extra.signature) || "",
+            mileage: (extra && extra.mileage) || null, status: "submitted", submittedAt: t, createdAt: t, updatedAt: t,
+            history: [{ status: "submitted", action: "submit", byUid: current.uid, byName: current.name, at: t, note: "" }]
+          };
+          c.totals = totals(c.receipts);
+          var batch = db.batch();
+          batch.set(ref, clean(c));
+          chosen.forEach(function (b) { batch.update(db.collection("bills").doc(b.id), { claimId: ref.id, updatedAt: t }); });
+          return batch.commit().then(function () { c.id = ref.id; return c; });
+        }).catch(function (e) { throw e.code ? friendly(e) : e; });
       },
+      /** Deleting a claim puts its bills back. */
       deleteClaim: function (id) {
-        return db.collection("claims").doc(id).delete().catch(function (e) { throw friendly(e); });
+        var ref = db.collection("claims").doc(id);
+        return ref.get().then(function (s) {
+          if (!s.exists) return;
+          var batch = db.batch();
+          (s.data().billIds || []).forEach(function (bid) { batch.update(db.collection("bills").doc(bid), { claimId: null, updatedAt: now() }); });
+          batch.delete(ref);
+          return batch.commit();
+        }).catch(function (e) { throw friendly(e); });
       },
       act: function (claim, action, data) {
-        if (!can(current, action, claim)) return Promise.reject(new Error("You can't do that on this claim."));
-        return this.saveClaim(applyAction(claim, action, current, data));
+        var c = clean(claim), id = c.id;
+        data = data || {};
+        if (action === "approve") {
+          // the admin checks the bills and approves: fills "Verified by" and "Approved by" on the form
+          c.status = "approved";
+          c.verifiedBy = c.approvedBy = current.name;
+          c.verifiedByUid = c.approvedByUid = current.uid;
+          c.verifiedAt = c.approvedAt = now();
+          c.amountApproved = Number(data.amountApproved);
+          c.approverSignature = data.signature || "";
+          c.remarks = data.note || "";
+        } else if (action === "return" || action === "reject") {
+          c.status = action === "return" ? "returned" : "rejected";
+          c.remarks = data.note || "";
+        } else if (action === "markPaid") {
+          c.status = "paid";
+          c.paidAt = data.paidAt || now();
+          c.paidAmount = Number(data.amount);
+          c.paidRef = data.reference || "";
+          c.paidBy = current.name;
+        } else if (action === "reopen") {
+          c.status = c.approvedAt ? "approved" : "submitted";
+          delete c.paidAt;
+          delete c.paidAmount;
+          delete c.paidRef;
+          delete c.paidBy;
+        } else {
+          return Promise.reject(new Error("Unknown action"));
+        }
+        c.updatedAt = now();
+        c.history = c.history || [];
+        c.history.push({ status: c.status, action: action, byUid: current.uid, byName: current.name, at: now(), note: data.note || "" });
+        delete c.id;
+        return db.collection("claims").doc(id).set(c).then(function () { c.id = id; return c; }).catch(function (e) { throw friendly(e); });
       },
+
+      // ---- photos ----
       savePhoto: function (claimId, dataUrl) {
-        var ref = db.collection("claims").doc(claimId).collection("photos").doc();
-        return ref.set({ data: dataUrl, ownerUid: current.uid, createdAt: now() })
-          .then(function () { return ref.id; })
+        var ref = db.collection("photos").doc();
+        return ref.set({ data: dataUrl, ownerUid: current.uid, createdAt: now() }).then(function () { return ref.id; })
           .catch(function (e) { throw friendly(e); });
       },
       getPhoto: function (claimId, photoId) {
         if (!photoId) return Promise.resolve(null);
-        return db.collection("claims").doc(claimId).collection("photos").doc(photoId).get()
-          .then(function (s) { return s.exists ? s.data().data : null; })
-          .catch(function () { return null; });
+        return db.collection("photos").doc(photoId).get().then(function (s) { return s.exists ? s.data().data : null; })
+          .catch(function () { return idbGet(photoId); });
       },
-      watchUsers: function (cb) {
-        return db.collection("users").onSnapshot(function (snap) {
-          cb(snap.docs.map(function (d) {
-            var u = d.data();
-            u.uid = d.id;
-            return u;
-          }));
-        }, function () {
-          cb([]);
+
+      // ---- one-time upload of what was saved on this phone before going online ----
+      localData: function () {
+        if (localStorage.getItem("ezfuel-uploaded")) return null;
+        var bills = [], claims = [], counter = null;
+        try {
+          bills = JSON.parse(localStorage.getItem("ezfuel-bills")) || [];
+          claims = JSON.parse(localStorage.getItem("ezfuel-claims")) || [];
+          counter = JSON.parse(localStorage.getItem("ezfuel-counter"));
+        } catch (e) {}
+        claims = claims.filter(function (c) { return c.status !== "draft"; });
+        return bills.length || claims.length ? { bills: bills, claims: claims, counter: counter } : null;
+      },
+      skipUpload: function () {
+        localStorage.setItem("ezfuel-uploaded", "skipped");
+      },
+      uploadLocal: function (progress) {
+        var data = this.localData();
+        if (!data) return Promise.resolve(0);
+        var photoMap = {}, billMap = {}, claimMap = {}, done = 0, total = data.bills.length + data.claims.length;
+        function step() { done++; if (progress) progress(done, total); }
+        var chain = Promise.resolve();
+        data.bills.forEach(function (b) {
+          chain = chain.then(function () {
+            return (b.photoId ? idbGet(b.photoId) : Promise.resolve(null)).then(function (img) {
+              if (!img) return null;
+              var ref = db.collection("photos").doc();
+              return ref.set({ data: img, ownerUid: current.uid, createdAt: now() }).then(function () { photoMap[b.photoId] = ref.id; });
+            }).then(function () {
+              var ref = db.collection("bills").doc();
+              billMap[b.id] = ref.id;
+              return ref.set({ ownerUid: current.uid, driverName: current.name, date: b.date, station: b.station || "", odometer: Number(b.odometer) || 0,
+                litres: Number(b.litres) || 0, amount: Number(b.amount) || 0, photoId: photoMap[b.photoId] || "", claimId: null, createdAt: b.createdAt || now(), updatedAt: now() });
+            }).then(step);
+          });
         });
-      },
-      setUser: function (uid, fields) {
-        return db.collection("users").doc(uid).update(fields).catch(function (e) { throw friendly(e); });
+        data.claims.forEach(function (c) {
+          chain = chain.then(function () {
+            var ref = db.collection("claims").doc(), x = clean(c);
+            delete x.id;
+            x.ownerUid = current.uid;
+            ["driverName:name", "employeeId:employeeId", "department:department", "vehicle:vehicle"].forEach(function (k) {
+              var f = k.split(":");
+              if (!x[f[0]]) x[f[0]] = current[f[1]] || "";
+            });
+            x.billIds = (c.billIds || []).map(function (id) { return billMap[id]; }).filter(Boolean);
+            x.receipts = (c.receipts || []).map(function (r) { var y = clean(r); y.id = billMap[r.id] || r.id; y.photoId = photoMap[r.photoId] || ""; return y; });
+            x.totals = totals(x.receipts);
+            x.updatedAt = now();
+            // only the office marks claims paid online: a claim paid on the phone comes in as waiting, with a note
+            if (x.status !== "submitted") {
+              x.history = (x.history || []).concat([{ status: "submitted", action: "upload", byUid: current.uid, byName: current.name, at: now(),
+                note: "Uploaded from the phone. The driver had marked it paid" + (x.paidAmount ? " (" + Number(x.paidAmount).toFixed(3) + " KD)" : "") + "; the office should confirm." }]);
+            }
+            x.status = "submitted";
+            delete x.paidAt;
+            delete x.paidAmount;
+            delete x.paidRef;
+            delete x.paidBy;
+            claimMap[c.id] = ref.id;
+            var batch = db.batch();
+            batch.set(ref, x);
+            x.billIds.forEach(function (bid) { batch.update(db.collection("bills").doc(bid), { claimId: ref.id }); });
+            return batch.commit().then(step);
+          });
+        });
+        return chain.then(function () {
+          var year = new Date().getFullYear();
+          if (data.counter && data.counter.year === year) {
+            return db.collection("counters").doc(current.uid).set({ year: year, next: data.counter.next });
+          }
+        }).then(function () {
+          localStorage.setItem("ezfuel-uploaded", String(now()));
+          return total;
+        }).catch(function (e) { throw friendly(e); });
       }
     };
+    return store;
   }
 
   var cfg = window.EZ_CONFIG || {};

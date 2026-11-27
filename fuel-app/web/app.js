@@ -4,11 +4,12 @@
 
   var S = window.EZStore, C = window.EZ_CONFIG, P = window.EZPdf;
   var LOCAL = S.mode === "local"; // one driver per phone, no server
+  // Online, the office account (role "admin") sees every driver; drivers see their own bills.
   var $main, $nav;
   var st = {
     user: null, ready: false, mine: [], all: [], users: [], allError: null,
     unsub: [], filter: { status: "all", month: "all", driver: "all", q: "" }, officeTab: "queue",
-    draft: null, step: 1, photoCache: {}, loginTab: "in", bills: []
+    draft: null, step: 1, photoCache: {}, loginTab: "in", bills: [], allBills: [], office: { driver: "all", month: "all" }
   };
 
   // ------------------------------------------------------------------ helpers
@@ -53,6 +54,7 @@
     return c.amountApproved !== undefined && c.amountApproved !== null && ["approved", "paid"].indexOf(c.status) >= 0
       ? Number(c.amountApproved) : (c.totals ? c.totals.amount : 0);
   }
+  function isAdmin() { return !LOCAL && !!st.user && st.user.role === "admin"; }
   function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
   function isStaff() { return S.isStaff(st.user); }
   function go(hash) {
@@ -313,7 +315,10 @@
     $nav.hidden = false;
     var r = (location.hash || "#/home").split("/")[1] || "home";
     var items;
-    if (LOCAL) {
+    if (isAdmin()) {
+      items = [["home", "Dashboard", ICON.office], ["all-bills", "Bills", ICON.fuel], ["claims", "Claims", ICON.list],
+        ["reports", "Reports", ICON.pdf], ["users", "People", ICON.users]];
+    } else if (true) {
       items = [["home", "Home", ICON.home], ["bills", "Bills", ICON.fuel], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
         ["claims", "Claims", ICON.list], ["reports", "Monthly", ICON.office]];
     } else {
@@ -337,7 +342,7 @@
     }
     top.hidden = false;
     top.innerHTML = '<img class="logo" src="img/logo.png" alt="EZ Storage">' +
-      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(LOCAL ? st.user.vehicle : S.ROLE_LABELS[st.user.role] || "") + "</span></div>" +
+      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(isAdmin() ? "Office" : st.user.vehicle || "") + "</span></div>" +
       '<a class="avatar" href="#/profile" aria-label="Your profile">' + esc(initials(st.user.name)) + "</a>";
   }
 
@@ -392,16 +397,17 @@
     return list.reduce(function (a, c) { return a + (fn ? fn(c) : amountOf(c)); }, 0);
   }
 
-  function claimItem(c, staffView) {
-    var who = staffView ? esc(c.driverName) + " · " : "";
+  function claimItem(c, staffView, showDriver) {
+    var who = staffView || showDriver ? esc(c.driverName) + " · " : "";
     var t = c.totals || { count: 0, amount: 0 };
     return '<a class="item" href="#/' + (staffView ? "review" : "claim") + "/" + esc(c.id) + '"><div class="main"><b>' + who + esc(c.claimNo || "Draft claim") + "</b><span>" +
-      esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + plural(t.count, LOCAL ? "bill" : "receipt") +
+      esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + plural(t.count, "bill") +
       (c.sample ? " · Example" : "") + '</span></div><div class="side"><span class="amt">' + kd(amountOf(c)) + ' KD</span>' + statusChip(c.status) + "</div></a>";
   }
 
   function viewHome() {
-    if (LOCAL) return viewHomeLocal();
+    if (isAdmin()) return viewOfficeOnline();
+    return viewHomeLocal();
     var mine = st.mine, now = new Date(), month = now.toISOString().slice(0, 7);
     var waiting = mine.filter(function (c) { return c.status === "submitted" || c.status === "verified"; });
     var toPay = mine.filter(function (c) { return c.status === "approved"; });
@@ -440,7 +446,8 @@
 
   function viewHomeLocal() {
     var mine = st.mine, now = new Date(), month = monthOf(today());
-    var waiting = mine.filter(function (c) { return c.status === "submitted"; });
+    var waiting = mine.filter(function (c) { return c.status === "submitted" || c.status === "approved"; });
+    var returned = mine.filter(function (c) { return c.status === "returned"; });
     var paidMonth = mine.filter(function (c) { return c.status === "paid" && c.paidAt && monthOf(new Date(c.paidAt).toISOString()) === month; });
     var all = billsWithMileage(), open = all.filter(function (b) { return !b.claimId; });
     var thisMonth = all.filter(function (b) { return monthOf(b.date) === month; });
@@ -449,7 +456,7 @@
     var cur = open.slice(0, need), m = mileageOf(cur);
     var curAmount = sum(cur, function (b) { return Number(b.amount) || 0; }), curLitres = sum(cur, function (b) { return Number(b.litres) || 0; });
     var last = mine.filter(function (c) { return c.status !== "draft"; }).sort(function (x, y) { return (y.submittedAt || 0) - (x.submittedAt || 0); })[0];
-    var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>";
+    var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>" + uploadBanner();
 
     // the bills collected for the next claim, counted separately from claimed / paid bills
     var pct = Math.min(100, Math.round(n / need * 100));
@@ -467,9 +474,12 @@
 
     // claims already made
     h += '<div class="section-title"><h2>My claims</h2><a href="#/claims">See all</a></div><div class="kpis">' +
-      kpi("Waiting for payment", kd(sum(waiting)), "KD", plural(waiting.length, "claim"), waiting.length > 0) +
+      kpi(LOCAL ? "Waiting for payment" : "Waiting (approval / payment)", kd(sum(waiting)), "KD", plural(waiting.length, "claim"), waiting.length > 0) +
       kpi("Paid this month", kd(sum(paidMonth, paidAmt)), "KD", plural(paidMonth.length, "claim")) + "</div>";
-    if (last) {
+    if (returned.length) {
+      h += '<div class="banner warn" style="margin-top:10px"><b>' + plural(returned.length, "claim") + " returned by the admin.</b> Open it to see why.</div>" +
+        '<div class="card flush list" style="margin-top:10px">' + returned.map(function (c) { return claimItem(c); }).join("") + "</div>";
+    } else if (last) {
       h += '<div class="card flush list" style="margin-top:10px">' + claimItem(last) + "</div>";
     }
 
@@ -492,6 +502,7 @@
   // ------------------------------------------------------------------ my claims
 
   function viewClaims() {
+    if (isAdmin()) return viewAllClaims();
     var f = st.filter.status;
     var keys = ["all", "draft", "submitted", "verified", "approved", "paid", "returned", "rejected"];
     var counts = {};
@@ -566,7 +577,7 @@
   }
 
   function viewClaim(id, staffView) {
-    if (LOCAL) return viewClaimLocal(id);
+    return viewClaimLocal(id);
     var c = findClaim(id);
     if (!c) return '<div class="card empty"><b>Claim not found</b>It may have been deleted. <a href="#/home">Go home</a></div>';
     var u = st.user, eff = efficiency(c.receipts || []);
@@ -619,51 +630,90 @@
   function viewClaimLocal(id) {
     var c = findClaim(id);
     if (!c) return '<div class="card empty"><b>Claim not found</b>It may have been deleted. <a href="#/home">Go home</a></div>';
-    var eff = efficiency(c.receipts || []);
-    var h = '<div class="spread" style="margin-bottom:4px"><h1>' + esc(c.claimNo || "Draft claim") + "</h1>" + statusChip(c.status) + "</div>" +
-      '<p class="sub">' + esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + esc(c.vehicle || "") + "</p>";
-    if (st.justFinished === c.id) {
-      h += '<div class="banner good" style="margin-bottom:14px"><b>Claim finished ✓</b> Now send the PDF to the office on WhatsApp.</div>';
-    } else if (c.status === "submitted") {
-      h += '<div class="banner info" style="margin-bottom:14px">Send the PDF to the office. When the money arrives, tap <b>Mark as paid</b>.</div>';
-    } else if (c.status === "paid") {
-      h += '<div class="banner good" style="margin-bottom:14px"><b>Paid ' + kd(paidAmt(c)) + " KD</b> on " + esc(fmtDate(new Date(c.paidAt).toISOString())) + (c.paidRef ? " · Ref. " + esc(c.paidRef) : "") + "</div>";
-    }
-    var acts = [];
-    if (c.status === "draft") {
-      acts.push('<a class="btn primary" href="#/edit/' + esc(c.id) + '">Continue claim</a>');
-    } else {
-      acts.push('<button class="btn primary" data-act="share" data-id="' + esc(c.id) + '">' + (canShare() ? ICON.whatsapp + "Share on WhatsApp" : ICON.share + "Share PDF") + "</button>");
-      acts.push('<button class="btn" data-act="pdf" data-id="' + esc(c.id) + '">' + ICON.pdf + "Download PDF</button>");
-      if (c.status === "submitted") {
-        acts.push('<button class="btn good" data-act="mark-paid" data-id="' + esc(c.id) + '">Mark as paid</button>');
+    var admin = isAdmin(), own = c.ownerUid === st.user.uid || LOCAL;
+    var h = '<div class="spread" style="margin-bottom:4px"><h1>' + esc(c.claimNo || "Claim") + "</h1>" + statusChip(c.status) + "</div>" +
+      '<p class="sub">' + (admin ? esc(c.driverName) + " · " : "") + esc(fmtDate(c.periodFrom)) + " – " + esc(fmtDate(c.periodTo)) + " · " + esc(c.vehicle || "") + "</p>";
 
-      } else if (c.status === "paid") {
-        acts.push('<button class="btn" data-act="reopen" data-id="' + esc(c.id) + '">Not paid yet</button>');
-      }
+    // status message
+    var msg = "";
+    if (st.justFinished === c.id && c.status === "submitted") msg = '<div class="banner good"><b>Claim created ✓</b> ' + (LOCAL ? "Now send the PDF to the office on WhatsApp." : "The admin can see it now and will check it.") + "</div>";
+    else if (c.status === "submitted") msg = '<div class="banner info">' + (admin ? "Check the bills and photos, then approve, return or reject this claim." : LOCAL ? "Send the PDF to the office. When the money arrives, tap <b>Mark as paid</b>." : "Waiting for the admin to check and approve it.") + "</div>";
+    else if (c.status === "approved") msg = '<div class="banner good"><b>Approved ' + kd(c.amountApproved) + " KD</b> by " + esc(c.approvedBy || "") + " on " + esc(fmtTime(c.approvedAt)) + (admin ? ". Mark it paid when the money is sent." : ". Waiting for payment.") + (c.remarks ? "<br>" + esc(c.remarks) : "") + "</div>";
+    else if (c.status === "paid") msg = '<div class="banner good"><b>Paid ' + kd(paidAmt(c)) + " KD</b> on " + esc(fmtDate(new Date(c.paidAt).toISOString())) + (c.paidRef ? " · Ref. " + esc(c.paidRef) : "") + "</div>";
+    else if (c.status === "returned") msg = '<div class="banner warn"><b>Returned by the admin:</b> ' + esc(c.remarks || "") + (own && !admin ? "<br>Delete this claim to fix the bills, then create it again." : "") + "</div>";
+    else if (c.status === "rejected") msg = '<div class="banner bad"><b>Rejected:</b> ' + esc(c.remarks || "") + "</div>";
+    if (msg) h += msg.replace('class="banner', 'style="margin-bottom:14px" class="banner');
+
+    var acts = [];
+    if (admin && c.status === "submitted") {
+      acts.push('<button class="btn good" data-act="approve" data-id="' + esc(c.id) + '">Approve</button>');
+      acts.push('<button class="btn warn" data-act="do" data-a="return" data-id="' + esc(c.id) + '">Return to driver</button>');
+      acts.push('<button class="btn bad" data-act="do" data-a="reject" data-id="' + esc(c.id) + '">Reject</button>');
     }
+    if ((admin && c.status === "approved") || (LOCAL && c.status === "submitted")) acts.push('<button class="btn good" data-act="mark-paid" data-id="' + esc(c.id) + '">Mark as paid</button>');
+    if ((admin || LOCAL) && c.status === "paid") acts.push('<button class="btn" data-act="reopen" data-id="' + esc(c.id) + '">Not paid yet</button>');
+    acts.push('<button class="btn' + (acts.length ? "" : " primary") + '" data-act="share" data-id="' + esc(c.id) + '">' + (canShare() ? ICON.whatsapp + "Share on WhatsApp" : ICON.share + "Share PDF") + "</button>");
+    acts.push('<button class="btn" data-act="pdf" data-id="' + esc(c.id) + '">' + ICON.pdf + "Download PDF</button>");
     h += '<div class="btn-row" style="margin-bottom:6px">' + acts.join("") + "</div>";
+
     h += '<div class="section-title"><h2>Details</h2></div><div class="card"><div class="kv">' +
       kvp("Driver", c.driverName) + kvp("Employee ID", c.employeeId) + kvp("Department", c.department) + kvp("Vehicle number", c.vehicle) +
-      kvp("Period", fmtDate(c.periodFrom) + " – " + fmtDate(c.periodTo)) + kvp("Submission date", c.status === "draft" ? "Not finished" : fmtDate(c.submissionDate)) +
+      kvp("Period", fmtDate(c.periodFrom) + " – " + fmtDate(c.periodTo)) + kvp("Submission date", fmtDate(c.submissionDate)) +
+      kvp("Amount claimed", kd(c.totals ? c.totals.amount : 0) + " KD") +
+      (c.amountApproved !== undefined && c.amountApproved !== null && c.approvedAt ? kvp("Amount approved", kd(c.amountApproved) + " KD") : "") +
       (c.status === "paid" ? kvp("Amount paid", kd(paidAmt(c)) + " KD") : "") + "</div></div>";
     var cm = claimMileage(c);
     if (cm) h += '<div class="section-title"><h2>Mileage</h2></div>' + mileageCard(cm).replace('style="margin-top:10px"', "");
-    h += '<div class="section-title"><h2>Fuel receipts</h2></div>' + receiptsBlock(c, false) + '<div style="height:10px"></div>' + totalsBar(c);
-    if (c.driverSignature) {
-      h += '<div class="section-title"><h2>Your signature</h2></div><div class="card"><img class="sig-img" alt="Driver signature" src="' + esc(c.driverSignature) + '"></div>';
+    h += '<div class="section-title"><h2>Fuel bills</h2></div>' + receiptsBlock(c, false) + '<div style="height:10px"></div>' + totalsBar(c);
+    if (c.driverSignature || c.approverSignature) {
+      h += '<div class="section-title"><h2>Signatures</h2></div><div class="card"><div class="grid2">' +
+        (c.driverSignature ? '<div><div class="eyebrow">Driver</div><img class="sig-img" alt="Driver signature" src="' + esc(c.driverSignature) + '"></div>' : "<div></div>") +
+        (c.approverSignature ? '<div><div class="eyebrow">Approved by ' + esc(c.approvedBy || "") + '</div><img class="sig-img" alt="Admin signature" src="' + esc(c.approverSignature) + '"></div>' : "") + "</div></div>";
     }
-    if (c.status !== "paid") {
-      h += '<div style="margin-top:22px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete claim</button><p class="sub" style="font-size:12.5px;margin-top:6px">Deleting the claim puts its bills back in your list.</p></div>';
+    var hist = (c.history || []).slice().reverse();
+    if (hist.length && !LOCAL) {
+      h += '<div class="section-title"><h2>History</h2></div><div class="card"><ul class="timeline">' + hist.map(function (x) {
+        return "<li><b>" + esc((S.STATUS[x.status] || {}).label || x.status) + "</b><span>" + esc(x.byName) + " · " + esc(fmtTime(x.at)) + "</span>" + (x.note ? "<p>" + esc(x.note) + "</p>" : "") + "</li>";
+      }).join("") + "</ul></div>";
+    }
+    var canDelete = LOCAL ? c.status !== "paid" : admin || (own && (c.status === "submitted" || c.status === "returned"));
+    if (canDelete) {
+      h += '<div style="margin-top:22px"><button class="btn bad block" data-act="delete-claim" data-id="' + esc(c.id) + '">Delete claim</button><p class="sub" style="font-size:12.5px;margin-top:6px">Deleting the claim puts its bills back in the list.</p></div>';
     }
     return h;
+  }
+
+  /** Admin approval: amount, remarks and the admin's signature (saved once, like the driver's). */
+  function approveSheet(id) {
+    var c = findClaim(id), u = st.user;
+    if (!c) return;
+    var h = '<h2>Approve claim</h2><p class="sub" style="margin-top:-6px">' + esc(c.claimNo) + " · " + esc(c.driverName) + " · " + kd(c.totals.amount) + ' KD claimed</p><div class="stack">' +
+      '<div class="banner info">Check that every bill photo matches its date, litres and amount before approving.</div>' +
+      '<div class="field"><label for="a-amount">Amount approved (KD)</label><input id="a-amount" type="number" step="0.001" min="0" inputmode="decimal" value="' + kd(c.totals.amount) + '"><span class="hint">Lower it if part of the claim isn\'t accepted, and say why in the remarks.</span></div>' +
+      '<div class="field"><label for="a-note">Remarks (optional)</label><textarea id="a-note"></textarea></div>' +
+      '<div class="field"><label>Signature / stamp</label>' + (u.signature ? '<img class="sig-img" alt="Your saved signature" src="' + esc(u.signature) + '"><span class="hint">Your saved signature goes on the form. Change it in Profile.</span>'
+        : '<div class="sig" id="a-sig"><canvas></canvas><div class="base"></div><div class="ph">Sign here</div></div><span class="hint">Saved for the next approvals.</span>') + "</div>" +
+      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn good" id="a-go">Approve</button></div></div>';
+    sheet(h, function (el, close) {
+      var pad = u.signature ? null : signaturePad(el.querySelector("#a-sig"));
+      el.querySelector("#a-go").onclick = function () {
+        var amt = parseFloat(el.querySelector("#a-amount").value);
+        if (isNaN(amt) || amt < 0) { toast("Enter the amount approved."); return; }
+        var sig = u.signature || (pad && !pad.isEmpty() ? pad.toDataURL() : "");
+        if (!sig) { toast("Please sign to approve."); return; }
+        this.disabled = true;
+        (u.signature ? Promise.resolve() : S.updateProfile({ signature: sig })).then(function () {
+          return S.act(c, "approve", { amountApproved: Math.round(amt * 1000) / 1000, signature: sig, note: el.querySelector("#a-note").value.trim() });
+        }).then(function () { close(); toast("Claim approved"); }).catch(function (e) { toast(e.message); });
+      };
+    });
   }
 
   function markPaid(id) {
     var c = findClaim(id);
     if (!c) return;
     var h = '<h2>Mark as paid</h2><p class="sub" style="margin-top:-6px">' + esc(c.claimNo) + " · " + kd(c.totals.amount) + ' KD claimed</p><div class="stack">' +
-      '<div class="grid2"><div class="field"><label for="p-amount">Amount received (KD)</label><input id="p-amount" type="number" step="0.001" min="0" inputmode="decimal" value="' + kd(c.totals.amount) + '"></div>' +
+      '<div class="grid2"><div class="field"><label for="p-amount">Amount received (KD)</label><input id="p-amount" type="number" step="0.001" min="0" inputmode="decimal" value="' + kd(c.approvedAt ? c.amountApproved : c.totals.amount) + '"></div>' +
       '<div class="field"><label for="p-date">Date paid</label><input id="p-date" type="date" value="' + today() + '" max="' + today() + '"></div></div>' +
       '<div class="field"><label for="p-ref">Reference (optional)</label><input id="p-ref" placeholder="e.g. salary, cash voucher number"></div>' +
       '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn good" id="p-go">Mark as paid</button></div></div>';
@@ -1101,28 +1151,32 @@
   // ------------------------------------------------------------------ staff (admin)
 
   function viewUsers() {
-    if (st.user.role !== "admin") return '<div class="card empty"><b>Administrators only</b></div>';
-    var users = st.users.slice().sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
-    var h = '<h1>Staff & roles</h1><p class="sub">Drivers submit claims. Verifiers check receipts. Approvers approve and mark paid. Administrators can do everything.</p><div class="card flush list">';
+    if (!isAdmin()) return '<div class="card empty"><b>Admin only</b></div>';
+    var order = function (u) { return u.pending && u.active === false ? 0 : u.active === false ? 2 : 1; };
+    var users = st.users.slice().sort(function (a, b) { return order(a) - order(b) || (a.name || "").localeCompare(b.name || ""); });
+    var h = '<h1>People</h1><p class="sub">Everyone who has created an account in the app. New accounts can\'t add bills until you allow them.</p><div class="card flush list">';
     h += users.map(function (u) {
-      return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + (u.uid === st.user.uid ? " (you)" : "") + "</b><span>" + esc(u.email || "") + " · " + esc(u.employeeId || "no ID") + " · " + esc(u.department || "") + "</span></div>" +
-        '<div class="side"><select aria-label="Role for ' + esc(u.name) + '" data-role="' + esc(u.uid) + '"' + (u.uid === st.user.uid ? " disabled" : "") + ">" +
-        S.ROLES.map(function (r) { return '<option value="' + r + '"' + (u.role === r ? " selected" : "") + ">" + S.ROLE_LABELS[r] + "</option>"; }).join("") + "</select>" +
-        (u.uid === st.user.uid ? "" : '<button class="link" data-act="toggle-active" data-uid="' + esc(u.uid) + '">' + (u.active === false ? "Re-activate" : "Deactivate") + "</button>") + "</div></div>";
+      var me = u.uid === st.user.uid, state = u.role === "admin" ? '<span class="status info">Admin</span>'
+        : u.pending && u.active === false ? '<span class="status warn">Waiting to be allowed</span>'
+        : u.active === false ? '<span class="status bad">Turned off</span>' : '<span class="status good">Allowed</span>';
+      var btn = me ? "" : u.pending && u.active === false ? '<button class="btn small good" data-act="allow-user" data-uid="' + esc(u.uid) + '">Allow</button>'
+        : u.role === "admin" ? "" : '<button class="link" data-act="toggle-active" data-uid="' + esc(u.uid) + '">' + (u.active === false ? "Turn on" : "Turn off") + "</button>";
+      return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + (me ? " (you)" : "") + "</b><span>" + esc(u.email || "") +
+        " · " + esc(u.employeeId || "no ID") + " · " + esc(u.vehicle || "no vehicle") + '</span></div><div class="side">' + state + btn + "</div></div>";
     }).join("");
-    return h + "</div>";
+    return h + "</div>" + '<p class="sub" style="font-size:12.5px;margin-top:10px">To make someone else an admin, change their <b>role</b> to <b>admin</b> in the Firebase console (Firestore → users).</p>';
   }
 
   // ------------------------------------------------------------------ profile
 
   function viewProfile() {
     var u = st.user;
-    var h = '<h1>Profile</h1><p class="sub">' + (LOCAL ? "These details go on every claim form." : esc(u.email || "") + " · " + esc(S.ROLE_LABELS[u.role])) + "</p>" +
+    var h = '<h1>Profile</h1><p class="sub">' + (LOCAL ? "These details go on every claim form." : esc(u.email || "") + " · " + esc(S.ROLE_LABELS[u.role] || u.role)) + "</p>" +
       '<form id="profile-form" class="card stack">' + field("name", "Full name", "text", u.name, "required") +
       '<div class="grid2">' + field("employeeId", "Employee ID", "text", u.employeeId || "", "") + selectField("department", "Department", C.departments, u.department || "") + "</div>" +
       field("vehicle", "Vehicle number", "text", u.vehicle || "", 'placeholder="e.g. KWT 12-34567"') +
       '<button class="btn primary" type="submit">Save profile</button></form>' +
-      (LOCAL ? '<div class="section-title"><h2>Signature</h2></div><div class="card spread">' +
+      (!isAdmin() ? '<div class="section-title"><h2>Signature</h2></div><div class="card spread">' +
         (u.signature ? '<img class="sig-img" alt="Your saved signature" src="' + esc(u.signature) + '">' : '<span class="sub" style="margin:0">Not set yet. You sign once, on your first claim.</span>') +
         '<button class="btn small" data-act="change-sig">' + (u.signature ? "Change" : "Add signature") + "</button></div>" : "") +
       '<div class="section-title"><h2>Install on your phone</h2></div><div class="card stack" style="font-size:14px">' +
@@ -1153,9 +1207,9 @@
   }
 
   /** All bills, oldest first, with km since the previous fill-up, km per litre and price per litre. */
-  function billsWithMileage() {
+  function billsWithMileage(source) {
     var prev = null;
-    return st.bills.slice().sort(billOrder).map(function (b) {
+    return (source || st.bills).slice().sort(billOrder).map(function (b) {
       var x = {};
       for (var k in b) x[k] = b[k];
       var odo = Number(b.odometer), litres = Number(b.litres), amount = Number(b.amount);
@@ -1206,7 +1260,7 @@
   }
 
   function claimNoOf(id) {
-    var c = st.mine.filter(function (x) { return x.id === id; })[0];
+    var c = findClaim(id);
     return c ? c.claimNo : "";
   }
 
@@ -1215,7 +1269,7 @@
     if (b.distance) mil.push("+" + b.distance.toLocaleString() + " km");
     if (b.kmpl) mil.push(b.kmpl.toFixed(1) + " km/L");
     return '<button class="receipt bill" data-act="open-bill" data-id="' + esc(b.id) + '"><span class="thumb" data-thumb="' + esc(b.photoId || "") + '" data-claim="">' + (b.photoId ? "" : "No photo") + "</span>" +
-      '<span class="main"><b>' + esc(b.station || "—") + "</b><span>" + esc(fmtDate(b.date)) + " · " + (b.odometer ? Number(b.odometer).toLocaleString() + " km" : "") + "</span>" +
+      '<span class="main"><b>' + (isAdmin() ? esc(b.driverName || "") + " · " : "") + esc(b.station || "—") + "</b><span>" + esc(fmtDate(b.date)) + " · " + (b.odometer ? Number(b.odometer).toLocaleString() + " km" : "") + "</span>" +
       (mil.length ? '<span class="mil">' + esc(mil.join(" · ")) + "</span>" : "") +
       '<span class="tag ' + (b.claimId ? "in" : "") + '">' + (b.claimId ? "In " + esc(claimNoOf(b.claimId)) : "Not claimed yet") + "</span></span>" +
       '<span class="amt">' + kd(b.amount) + " KD<small>" + lit(b.litres) + " L</small></span></button>";
@@ -1240,9 +1294,14 @@
 
   function billSheet(id) {
     var all = billsWithMileage();
+    if (isAdmin()) {
+      var owner = (st.allBills.filter(function (x) { return x.id === id; })[0] || {}).ownerUid;
+      all = billsWithMileage(st.allBills.filter(function (x) { return x.ownerUid === owner; }));
+    }
     var b = id ? all.filter(function (x) { return x.id === id; })[0] : null;
     if (id && !b) return;
-    var locked = !!(b && b.claimId);
+    if (!id && isAdmin()) return;
+    var locked = !!(b && b.claimId) || isAdmin();
     var r = b ? { id: b.id, date: b.date, station: b.station, odometer: b.odometer, litres: b.litres, amount: b.amount, photoId: b.photoId, createdAt: b.createdAt, claimId: b.claimId }
       : { date: today(), station: "", odometer: "", litres: "", amount: "", photoId: "" };
     var stations = {};
@@ -1250,7 +1309,7 @@
     var newPhoto = null;
     var dis = locked ? " disabled" : "";
     var h = "<h2>" + (b ? (locked ? "Fuel bill" : "Edit fuel bill") : "Add fuel bill") + "</h2>" +
-      (locked ? '<div class="banner info" style="margin-bottom:12px">This bill is in claim ' + esc(claimNoOf(b.claimId)) + ", so it can't be changed.</div>" : "") +
+      (locked ? '<div class="banner info" style="margin-bottom:12px">' + (isAdmin() ? esc(b.driverName || "") + (b.claimId ? " · in claim " + esc(claimNoOf(b.claimId)) : " · not claimed yet") + (b.distance ? " · " + b.distance.toLocaleString() + " km since the previous bill" : "") : "This bill is in claim " + esc(claimNoOf(b.claimId)) + ", so it can't be changed.") + "</div>" : "") +
       '<div class="stack"><div class="photo-pick"><span id="r-prev">' + (r.photoId ? '<img alt="Bill photo" id="r-img">' : '<span class="ph">' + ICON.camera + "</span>") + "</span>" +
       '<div class="grow"><b>Bill photo</b><div style="font-size:12.5px;color:var(--muted)">Lay the bill flat in good light.</div>' +
       (locked ? "" : '<div class="row" style="margin-top:8px"><label class="btn small primary">' + ICON.camera + 'Take photo<input type="file" accept="image/*" capture="environment" id="r-cam" hidden></label><label class="btn small">Choose<input type="file" accept="image/*" id="r-file" hidden></label></div>') + "</div></div>" +
@@ -1394,7 +1453,7 @@
     btn.disabled = true;
     btn.textContent = "Creating…";
     (st.user.signature ? Promise.resolve() : S.updateProfile({ signature: sig })).then(function () {
-      return S.createClaim(open.map(function (b) { return b.id; }), { signature: sig, mileage: mileageOf(open) });
+      return S.createClaim(open.map(function (b) { return b.id; }), { signature: sig, mileage: mileageOf(open) }, st.bills);
     }).then(function (c) {
       st.justFinished = c.id;
       toast("Claim created");
@@ -1420,8 +1479,8 @@
 
   // ---- monthly report ----
 
-  function monthReport(m) {
-    var all = billsWithMileage(), list = all.filter(function (b) { return monthOf(b.date) === m; });
+  function monthReport(m, source, claimsSource) {
+    var all = billsWithMileage(source), list = all.filter(function (b) { return monthOf(b.date) === m; });
     var t = {
       count: list.length,
       km: sum(list, function (b) { return b.distance || 0; }),
@@ -1433,7 +1492,7 @@
     var kmLitres = sum(withKm, function (b) { return Number(b.litres) || 0; });
     t.kmpl = kmLitres > 0 ? t.km / kmLitres : null;
     t.ppl = t.litres > 0 ? t.amount / t.litres : null;
-    var claims = st.mine.filter(function (c) { return monthOf(c.submissionDate) === m || list.some(function (b) { return b.claimId === c.id; }); });
+    var claims = (claimsSource || st.mine).filter(function (c) { return monthOf(c.submissionDate) === m || list.some(function (b) { return b.claimId === c.id; }); });
     return { month: m, label: monthLabel(m), bills: list, totals: t, claims: claims };
   }
 
@@ -1456,13 +1515,200 @@
     return h;
   }
 
-  function makeReportPdf(m) {
-    var rep = monthReport(m), withPhotos = document.getElementById("rep-photos") ? document.getElementById("rep-photos").checked : true;
+  function makeReportPdf(m, driverUid) {
+    var profile = st.user, rep;
+    if (driverUid && isAdmin()) {
+      rep = monthReport(m, st.allBills.filter(function (b) { return b.ownerUid === driverUid; }), st.all.filter(function (c) { return c.ownerUid === driverUid; }));
+      profile = st.users.filter(function (u) { return u.uid === driverUid; })[0] || { name: (rep.bills[0] || {}).driverName || "" };
+    } else {
+      rep = monthReport(m);
+    }
+    var withPhotos = document.getElementById("rep-photos") ? document.getElementById("rep-photos").checked : true;
     toast("Preparing PDF…");
     return Promise.all(rep.bills.map(function (b) { return withPhotos ? getPhoto(null, b.photoId) : null; })).then(function (photos) {
       rep.bills.forEach(function (b) { b.claimNo = b.claimId ? claimNoOf(b.claimId) : ""; });
-      return P.buildMonthly(rep, photos, st.user, C, S.STATUS).output("blob");
+      return P.buildMonthly(rep, photos, profile, C, S.STATUS).output("blob");
     });
+  }
+
+  // ------------------------------------------------------------------ office (online, role "admin")
+
+  function drivers() {
+    var byUid = {};
+    st.users.forEach(function (u) { if (u.role !== "admin" && !u.pending) byUid[u.uid] = { uid: u.uid, name: u.name, vehicle: u.vehicle, employeeId: u.employeeId, active: u.active !== false }; });
+    st.allBills.forEach(function (b) { if (!byUid[b.ownerUid]) byUid[b.ownerUid] = { uid: b.ownerUid, name: b.driverName || "Driver", vehicle: "", active: true }; });
+    return Object.keys(byUid).map(function (k) { return byUid[k]; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
+  }
+
+  function driverStats(d) {
+    var month = monthOf(today());
+    var bills = billsWithMileage(st.allBills.filter(function (b) { return b.ownerUid === d.uid; }));
+    var open = bills.filter(function (b) { return !b.claimId; });
+    var monthBills = bills.filter(function (b) { return monthOf(b.date) === month; });
+    var waiting = st.all.filter(function (c) { return c.ownerUid === d.uid && (c.status === "submitted" || c.status === "approved"); });
+    var last = bills[bills.length - 1];
+    return {
+      open: open.length, openKd: sum(open, function (b) { return Number(b.amount) || 0; }), openMileage: mileageOf(open.slice(0, CLAIM_SIZE)),
+      month: mileageOf(monthBills), monthKd: sum(monthBills, function (b) { return Number(b.amount) || 0; }), monthCount: monthBills.length,
+      waiting: waiting.length, waitingKd: sum(waiting), lastOdo: last ? Number(last.odometer) : null, lastDate: last ? last.date : null
+    };
+  }
+
+  function viewOfficeOnline() {
+    var month = monthOf(today()), ds = drivers();
+    var waiting = st.all.filter(function (c) { return c.status === "submitted"; });
+    var toPay = st.all.filter(function (c) { return c.status === "approved"; });
+    var pending = st.users.filter(function (u) { return u.pending && u.active === false && u.role !== "admin"; });
+    var paidMonth = st.all.filter(function (c) { return c.status === "paid" && c.paidAt && monthOf(new Date(c.paidAt).toISOString()) === month; });
+    var monthBills = billsWithMileage(st.allBills).filter(function (b) { return monthOf(b.date) === month; });
+    var h = '<h1>Admin dashboard</h1><p class="sub">Live from everyone using the app · ' + esc(monthLabel(month)) + "</p>";
+    if (pending.length) {
+      h += '<div class="card stack" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="spread"><h2>' + plural(pending.length, "person") .replace("persons", "people") + " waiting to be allowed</h2></div>" +
+        pending.map(function (u) {
+          return '<div class="spread"><div><b>' + esc(u.name) + '</b><div class="sub" style="margin:0;font-size:13px">' + esc(u.email || "") + " · " + esc(u.employeeId || "no ID") + " · " + esc(u.vehicle || "no vehicle") + "</div></div>" +
+            '<div class="row"><button class="btn small good" data-act="allow-user" data-uid="' + esc(u.uid) + '">Allow</button><a class="btn small" href="#/users">Details</a></div></div>';
+        }).join("") + "</div>";
+    }
+    if (st.allError) h += '<div class="banner bad" style="margin-bottom:14px">' + esc(st.allError) + "</div>";
+    h += '<div class="kpis">' +
+      kpi("Drivers", ds.filter(function (d) { return d.active; }).length, "", ds.filter(function (d) { return driverStats(d).open >= CLAIM_SIZE; }).length + " ready to claim") +
+      kpi("To approve", waiting.length, "", kd(sum(waiting)) + " KD", waiting.length > 0) +
+      kpi("Approved, to pay", kd(sum(toPay)), "KD", plural(toPay.length, "claim")) +
+      kpi("Fuel this month", kd(sum(monthBills, function (b) { return Number(b.amount) || 0; })), "KD", plural(monthBills.length, "bill")) + "</div>";
+
+    h += '<div class="section-title"><h2>Drivers</h2><span class="row"><button class="btn small" data-act="bills-csv">' + ICON.pdf + 'Bills (Excel)</button><button class="btn small" data-act="claims-csv">' + ICON.pdf + "Claims (Excel)</button></span></div>";
+    if (!ds.length) {
+      h += '<div class="card empty"><b>No drivers yet</b>Drivers appear here once they create their account in the app.</div>';
+    } else {
+      h += '<div class="card flush table-wrap"><table><thead><tr><th>Driver</th><th>Next claim</th><th class="r">New bills KD</th><th class="r">Last odometer</th><th class="r">Km this month</th><th class="r">km/L this month</th><th class="r">Waiting KD</th></tr></thead><tbody>' +
+        ds.map(function (d) {
+          var x = driverStats(d), n = Math.min(x.open, CLAIM_SIZE);
+          return '<tr><td><a href="#/all-bills/' + esc(d.uid) + '"><b>' + esc(d.name) + "</b></a><br><span class=\"sub\" style=\"font-size:12px\">" + esc(d.vehicle || "") + (d.active ? "" : " · turned off") + "</span></td>" +
+            '<td><div class="meter small-meter"><span style="width:' + Math.round(n / CLAIM_SIZE * 100) + '%"></span></div><span style="font-size:12.5px">' + x.open + " / " + CLAIM_SIZE + (x.open >= CLAIM_SIZE ? " · ready" : "") + "</span></td>" +
+            '<td class="r">' + kd(x.openKd) + '</td><td class="r">' + (x.lastOdo ? x.lastOdo.toLocaleString() + "<br><span class=\"sub\" style=\"font-size:12px\">" + esc(fmtDate(x.lastDate)) + "</span>" : "—") + "</td>" +
+            '<td class="r">' + (x.month ? x.month.km.toLocaleString() : "0") + '</td><td class="r">' + (x.month && x.month.kmpl ? x.month.kmpl.toFixed(1) : "—") + "</td>" +
+            '<td class="r">' + (x.waiting ? kd(x.waitingKd) + "<br><span class=\"sub\" style=\"font-size:12px\">" + plural(x.waiting, "claim") + "</span>" : "—") + "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+    h += '<div class="section-title"><h2>Claims to approve</h2><a href="#/claims">All claims</a></div>';
+    h += waiting.length ? '<div class="card flush list">' + waiting.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>"
+      : '<div class="card empty"><b>Nothing to approve</b>New claims from drivers appear here straight away.</div>';
+    if (toPay.length) {
+      h += '<div class="section-title"><h2>Approved, to pay</h2></div><div class="card flush list">' + toPay.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>";
+    }
+    var latest = billsWithMileage(st.allBills).slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).slice(0, 8);
+    h += '<div class="section-title"><h2>Latest bills</h2><a href="#/all-bills">All bills</a></div>';
+    h += latest.length ? '<div class="card flush">' + latest.map(billRow).join("") + "</div>" : '<div class="card empty"><b>No bills yet</b></div>';
+    return h;
+  }
+
+  function viewAllBills(uid) {
+    var ds = drivers(), sel = uid || "all";
+    var pool = sel === "all" ? st.allBills : st.allBills.filter(function (b) { return b.ownerUid === sel; });
+    // mileage is worked out per driver
+    var withKm = [];
+    ds.forEach(function (d) { withKm = withKm.concat(billsWithMileage(st.allBills.filter(function (b) { return b.ownerUid === d.uid; }))); });
+    var list = withKm.filter(function (b) { return pool.indexOf(st.allBills.filter(function (x) { return x.id === b.id; })[0]) >= 0; })
+      .sort(function (a, b) { return (b.date || "").localeCompare(a.date || "") || (b.createdAt || 0) - (a.createdAt || 0); });
+    var h = '<div class="spread"><h1>All bills</h1><button class="btn small" data-act="bills-csv">' + ICON.pdf + "Export Excel (CSV)</button></div>" +
+      '<p class="sub">' + plural(list.length, "bill") + " · " + kd(sum(list, function (b) { return Number(b.amount) || 0; })) + " KD · " + list.filter(function (b) { return !b.claimId; }).length + " not claimed yet</p>" +
+      '<div class="chips" style="margin-bottom:12px"><a class="chip' + (sel === "all" ? " on" : "") + '" href="#/all-bills">All drivers</a>' +
+      ds.map(function (d) { return '<a class="chip' + (sel === d.uid ? " on" : "") + '" href="#/all-bills/' + esc(d.uid) + '">' + esc(d.name) + "</a>"; }).join("") + "</div>";
+    if (sel !== "all") {
+      var x = driverStats(ds.filter(function (d) { return d.uid === sel; })[0] || { uid: sel });
+      h += '<div class="kpis" style="margin-bottom:12px">' + kpi("Next claim", Math.min(x.open, CLAIM_SIZE) + " / " + CLAIM_SIZE, "", kd(x.openKd) + " KD") +
+        kpi("Last odometer", x.lastOdo ? x.lastOdo.toLocaleString() : "—", "km", x.lastDate ? fmtDate(x.lastDate) : "") +
+        kpi("This month", x.month ? x.month.km.toLocaleString() : "0", "km", x.month && x.month.kmpl ? x.month.kmpl.toFixed(1) + " km/L" : "") +
+        kpi("Waiting for payment", kd(x.waitingKd), "KD", plural(x.waiting, "claim")) + "</div>" +
+        '<div style="margin-bottom:12px"><a class="btn small" href="#/reports/' + monthOf(today()) + "/" + esc(sel) + '">Monthly report for this driver</a></div>';
+    }
+    h += list.length ? '<div class="card flush">' + list.map(billRow).join("") + "</div>" : '<div class="card empty"><b>No bills</b></div>';
+    return h;
+  }
+
+  function viewAllClaims() {
+    var f = st.filter.status, keys = ["all", "submitted", "approved", "paid", "returned", "rejected"];
+    var counts = {};
+    st.all.forEach(function (c) { counts[c.status] = (counts[c.status] || 0) + 1; });
+    var list = st.all.filter(function (c) { return f === "all" || c.status === f; });
+    var h = '<div class="spread"><h1>All claims</h1><button class="btn small" data-act="claims-csv">' + ICON.pdf + "Export Excel (CSV)</button></div>" +
+      '<p class="sub">' + plural(st.all.length, "claim") + " · " + kd(sum(st.all.filter(function (c) { return c.status === "paid"; }), paidAmt)) + ' KD paid</p><div class="chips" style="margin-bottom:14px">';
+    keys.forEach(function (k) {
+      h += '<button class="chip' + (f === k ? " on" : "") + '" data-act="filter-status" data-v="' + k + '">' + (k === "all" ? "All" : k === "submitted" ? "To approve" : k === "approved" ? "Approved, to pay" : S.STATUS[k].label) + '<span class="n">' + (k === "all" ? st.all.length : counts[k] || 0) + "</span></button>";
+    });
+    h += "</div>";
+    return h + (list.length ? '<div class="card flush list">' + list.map(function (c) { return claimItem(c, false, true); }).join("") + "</div>" : '<div class="card empty"><b>No claims</b></div>');
+  }
+
+  function viewOfficeReports(m, uid) {
+    var ds = drivers();
+    if (!ds.length) return '<h1>Reports</h1><div class="card empty"><b>No drivers yet</b></div>';
+    uid = uid || ds[0].uid;
+    var src = st.allBills.filter(function (b) { return b.ownerUid === uid; });
+    var months = {};
+    src.forEach(function (b) { if (b.date) months[monthOf(b.date)] = 1; });
+    var keys = Object.keys(months).sort().reverse();
+    if (!m || keys.indexOf(m) < 0) m = keys[0] || monthOf(today());
+    var rep = monthReport(m, src, st.all.filter(function (c) { return c.ownerUid === uid; })), t = rep.totals;
+    var h = '<h1>Monthly reports</h1><p class="sub">Pick a driver and a month, then download or share the PDF.</p>' +
+      '<div class="chips" style="margin-bottom:10px">' + ds.map(function (d) { return '<a class="chip' + (d.uid === uid ? " on" : "") + '" href="#/reports/' + m + "/" + esc(d.uid) + '">' + esc(d.name) + "</a>"; }).join("") + "</div>" +
+      '<div class="chips" style="margin-bottom:14px">' + (keys.length ? keys.map(function (k) { return '<a class="chip' + (k === m ? " on" : "") + '" href="#/reports/' + k + "/" + esc(uid) + '">' + esc(monthLabel(k)) + "</a>"; }).join("") : '<span class="sub">No bills yet</span>') + "</div>" +
+      '<div class="kpis">' + kpi("Distance driven", t.km.toLocaleString(), "km", plural(t.count, "bill")) + kpi("Fuel cost", kd(t.amount), "KD", lit(t.litres) + " litres") +
+      kpi("Average", t.kmpl ? t.kmpl.toFixed(1) : "—", "km/L", t.ppl ? t.ppl.toFixed(3) + " KD per litre" : "") + kpi("Claimed", t.claimed + " / " + t.count, "", plural(rep.claims.length, "claim")) + "</div>" +
+      '<div class="card stack" style="margin-top:14px"><label class="check"><input type="checkbox" id="rep-photos" checked><span>Include the bill photos in the PDF</span></label>' +
+      '<div class="btn-row"><button class="btn primary" data-act="report-pdf" data-m="' + m + '" data-driver="' + esc(uid) + '">' + ICON.pdf + "Download PDF</button>" +
+      (canShare() ? '<button class="btn" data-act="report-share" data-m="' + m + '" data-driver="' + esc(uid) + '">' + ICON.share + "Share PDF</button>" : "") + "</div></div>" +
+      '<div class="section-title"><h2>Bills in ' + esc(rep.label) + '</h2></div><div class="card flush">' + (rep.bills.length ? rep.bills.slice().reverse().map(billRow).join("") : '<div class="empty">No bills this month</div>') + "</div>";
+    return h;
+  }
+
+  function csvLine(r) {
+    return r.map(function (v) {
+      v = String(v === undefined || v === null ? "" : v);
+      if (/^[=+\-@]/.test(v)) v = "'" + v;
+      return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }).join(",");
+  }
+
+  function exportBillsCsv() {
+    var rows = [["Driver", "Employee ID", "Vehicle", "Date", "Fuel Station", "Odometer (km)", "Distance since previous (km)", "Litres", "Amount (KD)", "km/L", "KD per litre", "Claim No", "Photo"]];
+    drivers().forEach(function (d) {
+      billsWithMileage(st.allBills.filter(function (b) { return b.ownerUid === d.uid; })).forEach(function (b) {
+        rows.push([d.name, d.employeeId || "", d.vehicle || "", b.date, b.station, b.odometer, b.distance || "", lit(b.litres), kd(b.amount),
+          b.kmpl ? b.kmpl.toFixed(1) : "", b.ppl ? b.ppl.toFixed(3) : "", b.claimId ? claimNoOf(b.claimId) : "", b.photoId ? "Yes" : "No"]);
+      });
+    });
+    saveFile(new Blob(["\ufeff" + rows.map(csvLine).join("\r\n")], { type: "text/csv" }), "Fuel bills " + today() + ".csv");
+  }
+
+  function exportClaimsCsv() {
+    var rows = [["Claim No", "Driver", "Employee ID", "Vehicle", "Period From", "Period To", "Submitted", "Bills", "Litres", "Amount (KD)", "Distance (km)", "Average km/L", "Status", "Approved KD", "Approved By", "Paid On", "Paid Amount (KD)", "Payment Ref", "Remarks"]];
+    st.all.forEach(function (c) {
+      var m = claimMileage(c);
+      rows.push([c.claimNo, c.driverName, c.employeeId, c.vehicle, c.periodFrom, c.periodTo, c.submissionDate, c.totals.count, lit(c.totals.litres), kd(c.totals.amount),
+        m ? m.km : "", m && m.kmpl ? m.kmpl.toFixed(1) : "", (S.STATUS[c.status] || {}).label || c.status,
+        c.approvedAt ? kd(c.amountApproved) : "", c.approvedBy || "",
+        c.paidAt ? new Date(c.paidAt).toISOString().slice(0, 10) : "", c.status === "paid" ? kd(paidAmt(c)) : "", c.paidRef || "", c.remarks || ""]);
+    });
+    saveFile(new Blob(["\ufeff" + rows.map(csvLine).join("\r\n")], { type: "text/csv" }), "Fuel claims " + today() + ".csv");
+  }
+
+  // ---- upload what a driver saved on the phone before the app went online ----
+
+  function uploadBanner() {
+    if (LOCAL || isAdmin() || !S.localData) return "";
+    var d = S.localData();
+    if (!d) return "";
+    return '<div class="banner info stack" style="margin-bottom:14px"><div><b>' + plural(d.bills.length, "bill") + " and " + plural(d.claims.length, "claim") +
+      "</b> saved on this phone aren't online yet. Upload them so the office can see them.</div>" +
+      '<div class="btn-row"><button class="btn primary" data-act="upload-local">Upload now</button><button class="btn" data-act="skip-upload">Not these</button></div></div>';
+  }
+
+  function uploadLocal(btn) {
+    btn.disabled = true;
+    S.uploadLocal(function (done, total) { btn.textContent = "Uploading " + done + " / " + total + "…"; })
+      .then(function (n) { toast("Uploaded " + n + " items"); route(); })
+      .catch(function (e) { btn.disabled = false; btn.textContent = "Upload now"; toast(e.message); });
   }
 
   // ------------------------------------------------------------------ router
@@ -1480,8 +1726,12 @@
       return;
     }
     document.getElementById("demo").hidden = true;
-    if (st.user.active === false) {
-      $main.innerHTML = '<div class="card empty"><b>Your account is turned off</b>Ask an administrator to re-activate it.<div style="margin-top:14px"><button class="btn" data-act="signout">Sign out</button></div></div>';
+    if (st.user.active === false && !isAdmin()) {
+      $main.innerHTML = st.user.pending
+        ? '<div class="login"><div class="box card stack" style="text-align:center"><img src="img/logo.png" alt="EZ Storage" style="width:150px;margin:0 auto">' +
+          '<h1>Waiting for approval</h1><p class="sub" style="margin:0">Your account (' + esc(st.user.email || "") + ') was created. The admin needs to allow it before you can add fuel bills. This page opens by itself once you are allowed.</p>' +
+          '<button class="btn" data-act="signout">Sign out</button></div></div>'
+        : '<div class="card empty"><b>Your account is turned off</b>Ask the admin to turn it back on.<div style="margin-top:14px"><button class="btn" data-act="signout">Sign out</button></div></div>';
       return;
     }
     var parts = (location.hash || "#/home").slice(2).split("/");
@@ -1493,11 +1743,12 @@
       case "claim": html = viewClaim(id, false); break;
       case "review": html = viewClaim(id, true); break;
       case "bills": html = viewBills(); break;
-      case "add": html = LOCAL ? viewBills() : viewHome(); break;
+      case "add": html = isAdmin() ? viewHome() : viewBills(); break;
+      case "all-bills": html = viewAllBills(id); break;
       case "make-claim": html = viewMakeClaim(); break;
-      case "reports": html = viewReports(id); break;
+      case "reports": html = isAdmin() ? viewOfficeReports(id, parts[2]) : viewReports(id); break;
       case "new":
-        if (LOCAL) { html = viewBills(); page = "add"; break; }
+        if (!isAdmin()) { html = viewBills(); page = "add"; break; }
         if (!st.draft) startDraft(null);
         html = viewForm();
         break;
@@ -1553,16 +1804,28 @@
         }).catch(function (x) { el.disabled = false; toast("Couldn't make the PDF: " + x.message); });
         break;
       case "do": doAction(el.getAttribute("data-id"), el.getAttribute("data-a")); break;
-      case "mark-paid": markPaid(el.getAttribute("data-id")); break;
+      case "mark-paid": if (LOCAL || isAdmin()) markPaid(el.getAttribute("data-id")); break;
+      case "approve": if (isAdmin()) approveSheet(el.getAttribute("data-id")); break;
+      case "allow-user":
+        S.setUser(el.getAttribute("data-uid"), { active: true, pending: false, allowedAt: Date.now(), allowedBy: st.user.name })
+          .then(function () { toast("Account allowed"); }).catch(function (x) { toast(x.message); });
+        break;
+      case "office-driver": st.office.driver = el.getAttribute("data-v"); route(); break;
+      case "bills-csv": exportBillsCsv(); break;
+      case "claims-csv": exportClaimsCsv(); break;
+      case "upload-local": uploadLocal(el); break;
+      case "skip-upload": S.skipUpload(); route(); break;
       case "add-bill": billSheet(null); break;
       case "open-bill": billSheet(el.getAttribute("data-id")); break;
       case "create-claim": createClaim(); break;
       case "change-sig": signatureSheet(); break;
       case "report-pdf":
       case "report-share":
-        var rm = el.getAttribute("data-m"), rname = "Fuel report " + monthLabel(rm) + " " + (st.user.name || "").replace(/[^\w\- ]+/g, "").trim() + ".pdf";
+        var rm = el.getAttribute("data-m"), ruid = el.getAttribute("data-driver") || "";
+        var rwho = ruid ? (st.users.filter(function (u) { return u.uid === ruid; })[0] || {}).name || "" : st.user.name || "";
+        var rname = "Fuel report " + monthLabel(rm) + " " + rwho.replace(/[^\w\- ]+/g, "").trim() + ".pdf";
         el.disabled = true;
-        makeReportPdf(rm).then(function (blob) {
+        makeReportPdf(rm, ruid).then(function (blob) {
           el.disabled = false;
           return a === "report-pdf" ? saveFile(blob, rname) : shareFile(blob, rname, "Fuel report " + monthLabel(rm));
         }).catch(function (x) { el.disabled = false; toast("Couldn't make the PDF: " + x.message); });
@@ -1585,7 +1848,7 @@
         break;
       case "delete-claim":
         var dc = findClaim(el.getAttribute("data-id"));
-        sheet("<h2>Delete this claim?</h2><p class=\"sub\">" + esc(dc.claimNo) + " will be deleted. " + (LOCAL ? "Its bills go back to your bills list." : "") + "</p><div class=\"btn-row\"><button class=\"btn\" data-close>Keep it</button><button class=\"btn bad\" id=\"del-go\">Delete</button></div>", function (s, close) {
+        sheet("<h2>Delete this claim?</h2><p class=\"sub\">" + esc(dc.claimNo) + " will be deleted. " + "Its bills go back to the bills list." + "</p><div class=\"btn-row\"><button class=\"btn\" data-close>Keep it</button><button class=\"btn bad\" id=\"del-go\">Delete</button></div>", function (s, close) {
           s.querySelector("#del-go").onclick = function () { S.deleteClaim(dc.id).then(function () { close(); toast("Claim deleted"); go("#/claims"); }); };
         });
         break;
@@ -1614,7 +1877,7 @@
       case "submit-claim": submitDraft(); break;
       case "toggle-active":
         var uid = el.getAttribute("data-uid"), uu = st.users.filter(function (x) { return x.uid === uid; })[0];
-        S.setUser(uid, { active: uu.active === false }).then(function () { toast(uu.active === false ? "Account re-activated" : "Account turned off"); }).catch(function (x) { toast(x.message); });
+        S.setUser(uid, { active: uu.active === false, pending: false }).then(function () { toast(uu.active === false ? "Account re-activated" : "Account turned off"); }).catch(function (x) { toast(x.message); });
         break;
     }
   });
@@ -1695,11 +1958,19 @@
     st.unsub = [];
     st.mine = [];
     st.bills = [];
+    st.allBills = [];
     st.all = [];
     st.users = [];
     if (!st.user) return;
+    if (st.user.active === false && !isAdmin()) return; // waiting to be allowed
     st.unsub.push(S.watchClaims("mine", function (list) { st.mine = list; refresh(); }));
-    if (LOCAL) st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
+    if (!isAdmin()) {
+      st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
+    } else {
+      st.unsub.push(S.watchBills(function (list) { st.allBills = list; refresh(); }, "all"));
+      st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
+      st.unsub.push(S.watchUsers(function (list) { st.users = list; refresh(); }));
+    }
     if (isStaff()) {
       st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
     }
@@ -1722,7 +1993,7 @@
     route();
     S.init().then(function () {
       S.onAuth(function (user) {
-        var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role;
+        var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role || st.user.active !== user.active;
         st.user = user;
         st.ready = true;
         if (roleChanged) subscribe();

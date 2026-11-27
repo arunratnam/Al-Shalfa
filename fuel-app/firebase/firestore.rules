@@ -1,79 +1,68 @@
 rules_version = '2';
-// Security rules for the EZ Storage fuel claims app.
-// Roles live in users/{uid}.role: driver | verifier | approver | admin
+// Security rules for the EZ Storage fuel app (online version).
+// One main admin checks everything; new accounts wait until the admin allows them.
+//   users/{uid}    role: "driver" | "admin", active (allowed), pending (new, not yet allowed)
+//   bills/{id}     one fuel bill, owned by a driver
+//   claims/{id}    a claim made from 10 bills
+//   photos/{id}    bill photos
+//   counters/{uid} each driver's claim numbering
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
     function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function active() { return signedIn() && me().active != false; }
-    function role() { return me().role; }
-    function isStaff() { return active() && role() in ['verifier', 'approver', 'admin']; }
-    function isAdmin() { return active() && role() == 'admin'; }
-    function unchanged(fields) { return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields); }
+    function active() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && me().active == true; }
+    function isAdmin() { return active() && me().role == 'admin'; }
+    function mine(data) { return active() && data.ownerUid == request.auth.uid; }
+    function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function num(v) { return v is int || v is float; }
 
     // ---- people ----
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isStaff());
-      // new accounts always start as an active driver
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // new accounts start as a driver waiting for the admin to allow them
       allow create: if signedIn() && request.auth.uid == uid
-        && request.resource.data.role == 'driver' && request.resource.data.active == true;
-      // people edit their own details, never their role or active flag
-      allow update: if (signedIn() && request.auth.uid == uid && unchanged(['role', 'active', 'email']))
-        || isAdmin();
+        && request.resource.data.role == 'driver' && request.resource.data.active == false && request.resource.data.pending == true;
+      // people edit their own details, never their role or whether they are allowed
+      allow update: if (signedIn() && request.auth.uid == uid && !changes().hasAny(['role', 'active', 'pending', 'email', 'allowedAt', 'allowedBy'])) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // ---- claim numbers ----
-    match /counters/{id} {
-      allow read, write: if active();
+    // ---- fuel bills ----
+    match /bills/{id} {
+      allow read: if mine(resource.data) || isAdmin();
+      allow create: if mine(request.resource.data) && request.resource.data.claimId == null
+        && request.resource.data.date is string && num(request.resource.data.odometer)
+        && num(request.resource.data.litres) && request.resource.data.litres > 0
+        && num(request.resource.data.amount) && request.resource.data.amount > 0;
+      // a driver edits a bill only until it is claimed; after that only its claim link can change
+      allow update: if mine(resource.data) && request.resource.data.ownerUid == request.auth.uid
+        && (resource.data.claimId == null || changes().hasOnly(['claimId', 'updatedAt']));
+      allow delete: if (mine(resource.data) && resource.data.claimId == null) || isAdmin();
     }
 
     // ---- claims ----
-    match /claims/{claimId} {
-      function owner() { return resource.data.ownerUid == request.auth.uid; }
-      function office() { return ['verifiedBy', 'verifiedByUid', 'verifiedAt', 'approvedBy', 'approvedByUid', 'approvedAt',
-                                  'amountApproved', 'approverSignature', 'paidAt', 'paidRef']; }
+    match /claims/{id} {
+      allow read: if mine(resource.data) || isAdmin();
+      allow create: if mine(request.resource.data) && request.resource.data.status == 'submitted'
+        && !request.resource.data.keys().hasAny(['paidAt', 'paidAmount', 'paidRef', 'paidBy']);
+      // only the admin approves, returns, rejects and marks claims paid
+      allow update: if isAdmin();
+      // a driver can withdraw a claim before it is approved, or after it was returned; its bills go back to the list
+      allow delete: if (mine(resource.data) && resource.data.status in ['submitted', 'returned']) || isAdmin();
+    }
 
-      allow read: if active() && (owner() || (isStaff() && resource.data.status != 'draft'));
+    // ---- bill photos ----
+    match /photos/{id} {
+      allow read: if mine(resource.data) || isAdmin();
+      allow create: if mine(request.resource.data) && request.resource.data.data is string
+        && request.resource.data.data.size() < 1000000;
+      allow delete: if mine(resource.data) || isAdmin();
+    }
 
-      // drivers create their own claims as a draft or straight as submitted
-      allow create: if active() && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.status in ['draft', 'submitted']
-        && !request.resource.data.keys().hasAny(office());
-
-      // drivers change their claim only while it's a draft or returned, and can only (re)submit it
-      allow update: if (active() && owner() && resource.data.status in ['draft', 'returned']
-                        && request.resource.data.ownerUid == request.auth.uid
-                        && request.resource.data.status in ['draft', 'submitted']
-                        && unchanged(office()))
-        // verifiers: submitted -> verified / returned / rejected
-        || (isStaff() && role() == 'verifier' && resource.data.status == 'submitted'
-            && request.resource.data.status in ['verified', 'returned', 'rejected']
-            && request.resource.data.ownerUid == resource.data.ownerUid
-            && unchanged(['receipts', 'approvedBy', 'approvedByUid', 'approvedAt', 'amountApproved', 'approverSignature', 'paidAt', 'paidRef']))
-        // approvers: verified -> approved / returned / rejected, approved -> paid
-        || (isStaff() && role() == 'approver'
-            && ((resource.data.status == 'verified' && request.resource.data.status in ['approved', 'returned', 'rejected'])
-                || (resource.data.status == 'submitted' && request.resource.data.status in ['returned', 'rejected'])
-                || (resource.data.status == 'approved' && request.resource.data.status == 'paid'))
-            && request.resource.data.ownerUid == resource.data.ownerUid
-            && unchanged(['receipts', 'driverSignature']))
-        // administrators can do any step
-        || isAdmin();
-
-      allow delete: if (active() && owner() && resource.data.status == 'draft') || isAdmin();
-
-      // receipt photos (stored here so the free plan is enough)
-      match /photos/{photoId} {
-        function claim() { return get(/databases/$(database)/documents/claims/$(claimId)).data; }
-        allow read: if active() && (claim().ownerUid == request.auth.uid || (isStaff() && claim().status != 'draft'));
-        allow create: if active() && claim().ownerUid == request.auth.uid
-          && claim().status in ['draft', 'returned']
-          && request.resource.data.ownerUid == request.auth.uid
-          && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
-        allow delete: if active() && claim().ownerUid == request.auth.uid && claim().status in ['draft', 'returned'];
-      }
+    // ---- claim numbers ----
+    match /counters/{uid} {
+      allow read, write: if active() && request.auth.uid == uid;
     }
   }
 }
