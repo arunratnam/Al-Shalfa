@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="theme" format="reference" />
+    <attr name="label" format="reference|string" />
+    <attr name="icon" format="reference" />
+    <attr name="name" format="string" />
+    <attr name="exported" format="boolean" />
+    <attr name="launchMode">
+        <enum name="standard" value="0" />
+        <enum name="singleTop" value="1" />
+        <enum name="singleTask" value="2" />
+        <enum name="singleInstance" value="3" />
+    </attr>
+    <attr name="value" format="string|integer|boolean|color|float|dimension|reference" />
+    <attr name="minSdkVersion" format="integer|string" />
+    <attr name="versionCode" format="integer" />
+    <attr name="versionName" format="string" />
+    <attr name="targetSdkVersion" format="integer|string" />
+    <attr name="allowBackup" format="boolean" />
+    <attr name="foregroundServiceType">
+        <flag name="specialUse" value="0x40000000" />
+    </attr>
+</resources>

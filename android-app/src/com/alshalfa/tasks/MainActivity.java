@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle b) {
+        setTheme(android.R.style.Theme_Material_NoActionBar);
         super.onCreate(b);
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);

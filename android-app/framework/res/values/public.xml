@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <public type="attr" name="theme" id="0x01010000" />
+    <public type="attr" name="label" id="0x01010001" />
+    <public type="attr" name="icon" id="0x01010002" />
+    <public type="attr" name="name" id="0x01010003" />
+    <public type="attr" name="exported" id="0x01010010" />
+    <public type="attr" name="launchMode" id="0x0101001d" />
+    <public type="attr" name="value" id="0x01010024" />
+    <public type="attr" name="minSdkVersion" id="0x0101020c" />
+    <public type="attr" name="versionCode" id="0x0101021b" />
+    <public type="attr" name="versionName" id="0x0101021c" />
+    <public type="attr" name="targetSdkVersion" id="0x01010270" />
+    <public type="attr" name="allowBackup" id="0x01010280" />
+    <public type="attr" name="foregroundServiceType" id="0x01010599" />
+    <public type="style" name="Theme.Material.NoActionBar" id="0x0103022e" />
+</resources>

@@ -1,18 +1,19 @@
 #!/bin/bash
-# Builds AlwaysOnTasks.apk without Gradle.
-# Needs (Ubuntu): apt-get install aapt apksigner zipalign dalvik-exchange
-# plus an Android 15 framework: org.robolectric:android-all:15-robolectric-12650502 from Maven Central.
-#   ANDROID_ALL = that jar (classes, for javac)
-#   ANDROID_RES = a zip holding only its resources.arsc (for aapt)
+# Builds AlwaysOnTasks.apk without Gradle, using Ubuntu packages only:
+#   apt-get install aapt apksigner zipalign dalvik-exchange
+# Plus the Android 15 framework classes for javac:
+#   ANDROID_ALL = org.robolectric:android-all:15-robolectric-12650502 jar (Maven Central)
+# The manifest is compiled against framework/, a small table of the real Android
+# attribute IDs, so the old aapt can target current Android versions.
 set -euo pipefail
 cd "$(dirname "$0")"
-ANDROID_ALL=${ANDROID_ALL:?set ANDROID_ALL}
-ANDROID_RES=${ANDROID_RES:?set ANDROID_RES}
+ANDROID_ALL=${ANDROID_ALL:?set ANDROID_ALL to the android-all jar}
 KS=${KEYSTORE:-release.keystore}
 rm -rf build && mkdir -p build/gen build/classes
 
-aapt package -f -M AndroidManifest.xml -S res -I "$ANDROID_RES" -J build/gen -F build/app.unsigned.apk
-javac -nowarn -source 8 -target 8 -bootclasspath "$ANDROID_ALL" -d build/classes \
+aapt package -f -x -M framework/AndroidManifest.xml -S framework/res -F build/framework.apk
+aapt package -f -M AndroidManifest.xml -S res -I build/framework.apk -J build/gen -F build/app.unsigned.apk
+javac -nowarn --release 8 -classpath "$ANDROID_ALL" -d build/classes \
   $(find build/gen src -name '*.java') 2>&1 | grep -v "^warning: \[options\]" || true
 dalvik-exchange --dex --output=build/classes.dex build/classes
 (cd build && aapt add app.unsigned.apk classes.dex >/dev/null)
