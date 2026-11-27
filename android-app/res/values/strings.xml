@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Always On Tasks</string>
+    <string name="widget_title">Tasks</string>
+    <string name="widget_empty">All done ✓</string>
+    <string name="widget_desc">Your open tasks. Tap one to tick it off.</string>
+    <string name="tile_label">Floating tasks</string>
 </resources>
