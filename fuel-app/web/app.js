@@ -446,32 +446,42 @@
     var thisMonth = all.filter(function (b) { return monthOf(b.date) === month; });
     var first = (st.user.name || "").split(" ")[0];
     var n = open.length, need = CLAIM_SIZE;
+    var cur = open.slice(0, need), m = mileageOf(cur);
+    var curAmount = sum(cur, function (b) { return Number(b.amount) || 0; }), curLitres = sum(cur, function (b) { return Number(b.litres) || 0; });
+    var last = mine.filter(function (c) { return c.status !== "draft"; }).sort(function (x, y) { return (y.submittedAt || 0) - (x.submittedAt || 0); })[0];
     var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>";
 
-    // progress towards the next claim
+    // the bills collected for the next claim, counted separately from claimed / paid bills
     var pct = Math.min(100, Math.round(n / need * 100));
-    h += '<div class="card stack progress-card"><div class="spread"><div><div class="eyebrow">Next claim</div><div class="big num">' + Math.min(n, need) + "<small> / " + need + " bills</small></div></div>" +
+    h += '<div class="card stack progress-card"><div class="spread"><div><div class="eyebrow">Next claim · new bills</div><div class="big num">' + Math.min(n, need) + "<small> / " + need + " bills</small></div></div>" +
       (n >= need ? '<span class="status good">Ready to claim</span>' : '<span class="status muted">' + (need - n) + " more needed</span>") + "</div>" +
       '<div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="' + need + '" aria-valuenow="' + Math.min(n, need) + '"><span style="width:' + pct + '%"></span></div>' +
+      (n ? '<div class="mini"><div><span>Amount</span><b>' + kd(curAmount) + " KD</b></div><div><span>Distance</span><b>" + (m && m.km ? m.km.toLocaleString() + " km" : "—") + "</b></div>" +
+        "<div><span>Litres</span><b>" + lit(curLitres) + "</b></div><div><span>Mileage</span><b>" + (m && m.kmpl ? m.kmpl.toFixed(1) + " km/L" : "—") + "</b></div></div>" : "") +
       (n >= need
-        ? '<p class="sub" style="margin:0">' + need + " bills (" + kd(sum(open.slice(0, need), function (b) { return Number(b.amount) || 0; })) + " KD) are ready. Create the claim and send the PDF on WhatsApp.</p>" +
+        ? '<p class="sub" style="margin:0">' + need + " bills are ready. Create the claim and send the PDF on WhatsApp.</p>" +
           '<div class="btn-row"><a class="btn primary" href="#/make-claim">Create claim</a><button class="btn" data-act="add-bill">' + ICON.camera + "Add fuel bill</button></div>"
-        : '<p class="sub" style="margin:0">Add each fuel bill when you fill up. After ' + need + " bills you can make a claim.</p>" +
+        : '<p class="sub" style="margin:0">' + (n ? "Bills added since your last claim." : last ? "Your last claim is done. Start adding bills for the next one." : "Add each fuel bill when you fill up.") +
+          " After " + need + " bills you can make a claim.</p>" +
           '<button class="btn primary block" data-act="add-bill">' + ICON.camera + "Add fuel bill</button>") + "</div>";
 
-    h += '<div class="section-title"><h2>This month</h2><a href="#/reports/' + month + '">Monthly report</a></div><div class="kpis">' +
-      kpi("Distance driven", sum(thisMonth, function (b) { return b.distance || 0; }).toLocaleString(), "km", plural(thisMonth.length, "bill")) +
-      kpi("Fuel cost", kd(sum(thisMonth, function (b) { return Number(b.amount) || 0; })), "KD", lit(sum(thisMonth, function (b) { return Number(b.litres) || 0; })) + " litres") +
+    // claims already made
+    h += '<div class="section-title"><h2>My claims</h2><a href="#/claims">See all</a></div><div class="kpis">' +
       kpi("Waiting for payment", kd(sum(waiting)), "KD", plural(waiting.length, "claim"), waiting.length > 0) +
       kpi("Paid this month", kd(sum(paidMonth, paidAmt)), "KD", plural(paidMonth.length, "claim")) + "</div>";
-
-    var recent = all.slice().reverse().slice(0, 5);
-    h += '<div class="section-title"><h2>Latest bills</h2><a href="#/bills">See all</a></div>';
-    h += recent.length ? '<div class="card flush">' + recent.map(billRow).join("") + "</div>"
-      : '<div class="card empty"><b>No fuel bills yet</b>Tap "Add fuel bill" after you fill up, and take a photo of the bill.</div>';
-    if (waiting.length) {
-      h += '<div class="section-title"><h2>Waiting for payment</h2></div><div class="card flush list">' + waiting.map(function (c) { return claimItem(c); }).join("") + "</div>";
+    if (last) {
+      h += '<div class="card flush list" style="margin-top:10px">' + claimItem(last) + "</div>";
     }
+
+    // the whole month, claimed and new bills together
+    h += '<div class="section-title"><h2>This month · all bills</h2><a href="#/reports/' + month + '">Monthly report</a></div><div class="kpis">' +
+      kpi("Distance driven", sum(thisMonth, function (b) { return b.distance || 0; }).toLocaleString(), "km", plural(thisMonth.length, "bill")) +
+      kpi("Fuel cost", kd(sum(thisMonth, function (b) { return Number(b.amount) || 0; })), "KD", lit(sum(thisMonth, function (b) { return Number(b.litres) || 0; })) + " litres") + "</div>";
+
+    var recent = open.slice().reverse().slice(0, 5);
+    h += '<div class="section-title"><h2>New bills (not claimed yet)</h2><a href="#/bills">All bills</a></div>';
+    h += recent.length ? '<div class="card flush">' + recent.map(billRow).join("") + "</div>"
+      : '<div class="card empty"><b>No new bills</b>Tap "Add fuel bill" after you fill up, and take a photo of the bill.</div>';
     return h;
   }
 
