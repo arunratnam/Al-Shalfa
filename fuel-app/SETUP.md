@@ -8,7 +8,8 @@ Each driver installs the app on their own phone. There is no server and no accou
    **price per litre**. An odometer reading lower than the previous bill is refused.
 3. The home screen counts the bills: **7 / 10**. At **10 bills**, tap **Create claim**: the oldest 10 bills
    go into one claim. The driver ticks the declaration and signs **once**; the signature is saved and used
-   on every later claim (change it in Profile).
+   on every later claim (change it in Profile). The claim shows the **distance driven** (odometer range),
+   **average mileage** (km/L) and **average price per litre** for its 10 bills, also on the PDF.
 4. Tap **Share on WhatsApp** to send the claim PDF to the office, or **Download PDF**. The PDF is form
    **EZ-OPS-FUEL-002**: sections A–D filled in, section E left blank for the office, then the bill photos.
 5. **Monthly** shows the month's report (bills, km, litres, KD, km/L, claims) and shares it as a PDF,

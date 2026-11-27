@@ -328,6 +328,7 @@
               return { id: b.id, date: b.date, station: b.station, odometer: b.odometer, litres: b.litres, amount: b.amount, photoId: b.photoId };
             }),
             billIds: chosen.map(function (b) { return b.id; }), declaration: true, driverSignature: (extra && extra.signature) || "",
+            mileage: (extra && extra.mileage) || null,
             status: "submitted", submittedAt: t, history: [{ status: "submitted", action: "submit", byUid: "me", byName: profile.name, at: t, note: "" }]
           };
           return self.saveClaim(c);

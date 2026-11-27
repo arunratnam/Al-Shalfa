@@ -220,6 +220,12 @@
     var approved = claim.amountApproved !== undefined && claim.amountApproved !== null && claim.amountApproved !== "" ? kd(claim.amountApproved) + " KD" : "";
     pairRow(doc, y, 8, [["Total Amount Submitted", kd(t.amount) + " KD", 42, 54], ["Amount Approved", approved, 42, 44]]);
     y += 8;
+    var mi = claim.mileage;
+    if (mi && mi.km) {
+      pairRow(doc, y, 8, [["Distance Driven", Number(mi.km).toLocaleString("en-US") + " km (" + Number(mi.startOdo).toLocaleString("en-US") + " – " + Number(mi.endOdo).toLocaleString("en-US") + ")", 42, 54],
+        ["Average Mileage", (mi.kmpl ? mi.kmpl.toFixed(1) + " km/L" : "—") + (mi.ppl ? "  ·  " + mi.ppl.toFixed(3) + " KD/L" : ""), 42, 44]]);
+      y += 8;
+    }
 
     // ---- D ----
     y += 7;

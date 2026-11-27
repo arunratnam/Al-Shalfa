@@ -167,7 +167,9 @@
     toast("Preparing PDF…");
     return Promise.all((claim.receipts || []).map(function (r) { return getPhoto(claim.id, r.photoId); }))
       .then(function (photos) {
-        var doc = P.build(claim, photos, C, S.STATUS);
+        var withMileage = JSON.parse(JSON.stringify(claim));
+        withMileage.mileage = claimMileage(claim);
+        var doc = P.build(withMileage, photos, C, S.STATUS);
         return doc.output("blob");
       });
   }
@@ -634,8 +636,9 @@
     h += '<div class="section-title"><h2>Details</h2></div><div class="card"><div class="kv">' +
       kvp("Driver", c.driverName) + kvp("Employee ID", c.employeeId) + kvp("Department", c.department) + kvp("Vehicle number", c.vehicle) +
       kvp("Period", fmtDate(c.periodFrom) + " – " + fmtDate(c.periodTo)) + kvp("Submission date", c.status === "draft" ? "Not finished" : fmtDate(c.submissionDate)) +
-      (eff ? kvp("Distance", eff.km.toLocaleString() + " km") + kvp("Fuel economy", eff.kmpl.toFixed(1) + " km/L") : "") +
       (c.status === "paid" ? kvp("Amount paid", kd(paidAmt(c)) + " KD") : "") + "</div></div>";
+    var cm = claimMileage(c);
+    if (cm) h += '<div class="section-title"><h2>Mileage</h2></div>' + mileageCard(cm).replace('style="margin-top:10px"', "");
     h += '<div class="section-title"><h2>Fuel receipts</h2></div>' + receiptsBlock(c, false) + '<div style="height:10px"></div>' + totalsBar(c);
     if (c.driverSignature) {
       h += '<div class="section-title"><h2>Your signature</h2></div><div class="card"><img class="sig-img" alt="Driver signature" src="' + esc(c.driverSignature) + '"></div>';
@@ -1154,6 +1157,44 @@
     });
   }
 
+  /** Distance, average km per litre and price per litre for a set of bills (from the odometer readings). */
+  function mileageOf(list) {
+    if (!list.length) return null;
+    var withKm = list.filter(function (b) { return b.distance; });
+    var km = sum(withKm, function (b) { return b.distance; });
+    var kmLitres = sum(withKm, function (b) { return Number(b.litres) || 0; });
+    var litres = sum(list, function (b) { return Number(b.litres) || 0; }), amount = sum(list, function (b) { return Number(b.amount) || 0; });
+    var first = list[0], last = list[list.length - 1];
+    return {
+      km: km,
+      kmpl: kmLitres > 0 && km > 0 ? Math.round(km / kmLitres * 10) / 10 : null,
+      ppl: litres > 0 ? Math.round(amount / litres * 1000) / 1000 : null,
+      costPerKm: km > 0 ? Math.round(amount / km * 1000) / 1000 : null,
+      startOdo: Number(first.odometer) - (first.distance || 0),
+      endOdo: Number(last.odometer)
+    };
+  }
+
+  /** Mileage stored on a claim, or worked out from its receipts for older claims. */
+  function claimMileage(c) {
+    if (c.mileage) return c.mileage;
+    var e = efficiency(c.receipts || []);
+    if (!e) return null;
+    var rs = (c.receipts || []).filter(function (r) { return Number(r.odometer); }).sort(function (a, b) { return Number(a.odometer) - Number(b.odometer); });
+    var t = S.totals(c.receipts);
+    return { km: e.km, kmpl: Math.round(e.kmpl * 10) / 10, ppl: t.litres > 0 ? Math.round(t.amount / t.litres * 1000) / 1000 : null,
+      costPerKm: null, startOdo: Number(rs[0].odometer), endOdo: Number(rs[rs.length - 1].odometer) };
+  }
+
+  function mileageCard(m) {
+    if (!m) return "";
+    return '<div class="card flush totals" style="margin-top:10px"><div><span>Distance driven</span><b>' + Number(m.km).toLocaleString() + " km</b></div>" +
+      "<div><span>Average mileage</span><b>" + (m.kmpl ? m.kmpl.toFixed(1) + " km/L" : "—") + "</b></div>" +
+      "<div><span>Average price</span><b>" + (m.ppl ? m.ppl.toFixed(3) + " KD/L" : "—") + "</b></div></div>" +
+      '<p class="sub" style="font-size:12.5px;margin:6px 0 0">Odometer ' + Number(m.startOdo).toLocaleString() + " → " + Number(m.endOdo).toLocaleString() + " km" +
+      (m.costPerKm ? " · " + m.costPerKm.toFixed(3) + " KD per km" : "") + "</p>";
+  }
+
   function claimNoOf(id) {
     var c = st.mine.filter(function (x) { return x.id === id; })[0];
     return c ? c.claimNo : "";
@@ -1312,10 +1353,10 @@
       return '<h1>Create claim</h1><div class="card empty"><b>' + open.length + " of " + CLAIM_SIZE + " bills</b>A claim needs " + CLAIM_SIZE + " fuel bills. Add " + (CLAIM_SIZE - open.length) + " more.<div style=\"margin-top:14px\"><button class=\"btn primary\" data-act=\"add-bill\">Add fuel bill</button></div></div>";
     }
     var chosen = open.slice(0, CLAIM_SIZE), u = st.user;
-    var km = sum(chosen, function (b) { return b.distance || 0; });
     var litres = sum(chosen, function (b) { return Number(b.litres) || 0; }), amount = sum(chosen, function (b) { return Number(b.amount) || 0; });
     var h = "<h1>Create claim</h1><p class=\"sub\">Your oldest " + CLAIM_SIZE + " bills, " + esc(fmtDate(chosen[0].date)) + " – " + esc(fmtDate(chosen[chosen.length - 1].date)) + "</p>" +
-      '<div class="card flush totals" style="grid-template-columns:repeat(4,minmax(0,1fr))"><div><span>Bills</span><b>' + chosen.length + "</b></div><div><span>Distance</span><b>" + km.toLocaleString() + " km</b></div><div><span>Litres</span><b>" + lit(litres) + "</b></div><div><span>Total</span><b>" + kd(amount) + " KD</b></div></div>" +
+      '<div class="card flush totals"><div><span>Bills</span><b>' + chosen.length + "</b></div><div><span>Litres</span><b>" + lit(litres) + "</b></div><div><span>Total</span><b>" + kd(amount) + " KD</b></div></div>" +
+      mileageCard(mileageOf(chosen)) +
       '<div class="section-title"><h2>Bills in this claim</h2></div><div class="card flush">' + chosen.map(billRow).join("") + "</div>" +
       '<div class="card stack" style="margin-top:14px"><div class="eyebrow">Driver declaration</div>' +
       '<label class="check"><input type="checkbox" id="decl"><span>I confirm that all fuel receipts listed above relate to the company vehicle and that the information provided is correct. All original receipts are attached.</span></label>' +
@@ -1343,7 +1384,7 @@
     btn.disabled = true;
     btn.textContent = "Creating…";
     (st.user.signature ? Promise.resolve() : S.updateProfile({ signature: sig })).then(function () {
-      return S.createClaim(open.map(function (b) { return b.id; }), { signature: sig });
+      return S.createClaim(open.map(function (b) { return b.id; }), { signature: sig, mileage: mileageOf(open) });
     }).then(function (c) {
       st.justFinished = c.id;
       toast("Claim created");
