@@ -1,18 +1,18 @@
 /*
  * EZ Storage Fuel Expense app settings.
  *
- * To go live, paste your Firebase web app settings into `firebase` below
- * (Firebase console → Project settings → Your apps → Web app → SDK setup → Config).
- * While `firebase` is null the app runs in demo mode: data stays on that phone only.
+ * Connected to the company's Firebase project "ezfuel-20933" (online version: one admin, all drivers).
+ * Set `firebase: null` to build the offline version, where data stays on each phone.
  */
 window.EZ_CONFIG = {
-  firebase: null,
-  // firebase: {
-  //   apiKey: "…",
-  //   authDomain: "your-project.firebaseapp.com",
-  //   projectId: "your-project",
-  //   appId: "…"
-  // },
+  firebase: {
+    apiKey: "AIzaSyDdahN8JW00Y5_NFOdAHE4qb9r6ms6lJyk",
+    authDomain: "ezfuel-20933.firebaseapp.com",
+    projectId: "ezfuel-20933",
+    storageBucket: "ezfuel-20933.firebasestorage.app",
+    messagingSenderId: "996581712381",
+    appId: "1:996581712381:web:3d530d3d26d2b04c80f994"
+  },
 
   companyName: "EZ Storage",
   formTitle: "Fuel Expense Submission Form",
