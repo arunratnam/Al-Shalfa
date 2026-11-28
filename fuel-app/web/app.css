@@ -461,3 +461,8 @@ html[dir="rtl"] .map, html[dir="rtl"] .sig-img, html[dir="rtl"] canvas { directi
 html[dir="rtl"] .link[style*="text-align:left"] { text-align: right !important; }
 .map-wrap { position: relative; }
 .map-info a { color: var(--brand); font-weight: 600; }
+/* pins: name above, tip on the spot */
+.pin-wrap { display: flex; flex-direction: column; align-items: center; transform: translate(-50%, calc(-100% + 2px)); width: max-content; }
+.pin-wrap .pin-name { margin: 0 0 4px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 2px 7px; border-radius: 8px; }
+.pin-wrap .pin { width: 30px; height: 30px; }
+.wh-label.below { transform: translate(-50%, 3px); }

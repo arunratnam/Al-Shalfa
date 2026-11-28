@@ -3041,25 +3041,52 @@
     }
   }
 
+  /** Pin with the person's name above it (the same look on Google and the free map). */
+  function pinHtml(p) {
+    var nm = p.name.length > 18 ? p.name.slice(0, 17) + "…" : p.name;
+    return '<div class="pin-name">' + esc(nm) + '</div><div class="pin' + (p.fresh ? "" : " stale") + (mapState.sel === p.uid ? " sel" : "") + '"><b>' + esc(initials(p.name)) + "</b></div>";
+  }
+  /** Warehouse label just below its circle, so a driver standing there doesn't cover it. */
+  function whLabelPos(w) { return { lat: w.lat - (Number(w.radius) || 300) / 111320, lng: w.lng }; }
+
+  /** HTML marker on Google Maps. */
+  function gHtml(m, pos, cls, html, onClick, z) {
+    var ov = new google.maps.OverlayView(), div = null;
+    ov.onAdd = function () {
+      div = document.createElement("div");
+      div.className = cls;
+      div.innerHTML = html;
+      div.style.position = "absolute";
+      if (z) div.style.zIndex = z;
+      if (onClick) {
+        div.style.cursor = "pointer";
+        div.addEventListener("click", function (e) { e.stopPropagation(); onClick(); });
+      }
+      this.getPanes()[onClick ? "overlayMouseTarget" : "overlayLayer"].appendChild(div);
+    };
+    ov.draw = function () {
+      var pt = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(pos.lat, pos.lng));
+      if (pt && div) { div.style.left = pt.x + "px"; div.style.top = pt.y + "px"; }
+    };
+    ov.onRemove = function () { if (div) div.remove(); div = null; };
+    ov.setMap(m);
+    return ov;
+  }
+
   function drawGoogle(m, people, isToday, r) {
     (mapState.gobjs || []).forEach(function (o) { o.setMap(null); });
     var objs = mapState.gobjs = [], b = new google.maps.LatLngBounds(), n = 0;
     tcfg().warehouses.forEach(function (w) {
       if (!w.lat) return;
       objs.push(new google.maps.Circle({ map: m, center: { lat: w.lat, lng: w.lng }, radius: Number(w.radius) || 300, strokeColor: "#6b7280", strokeWeight: 1, fillColor: "#6b7280", fillOpacity: 0.08, clickable: false }));
-      objs.push(new google.maps.Marker({ map: m, position: { lat: w.lat, lng: w.lng }, clickable: false,
-        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 0 }, label: { text: w.name, fontSize: "11px", fontWeight: "700", color: "#374151" } }));
+      objs.push(gHtml(m, whLabelPos(w), "wh-label below", esc(w.name)));
       b.extend({ lat: w.lat, lng: w.lng }); n++;
     });
     if (isToday) {
       people.forEach(function (p) {
         var l = p.live;
         if (!l || l.date !== today() || !p.open) return;
-        var mk = new google.maps.Marker({ map: m, position: { lat: l.lat, lng: l.lng }, title: p.name, zIndex: mapState.sel === p.uid ? 10 : 5,
-          label: { text: initials(p.name), color: "#ffffff", fontSize: "12px", fontWeight: "700" },
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 15, fillColor: mapState.sel === p.uid ? "#111827" : p.fresh ? "#c8102e" : "#9ca3af", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } });
-        mk.addListener("click", function () { selectOnMap(p.uid); });
-        objs.push(mk);
+        objs.push(gHtml(m, { lat: l.lat, lng: l.lng }, "pin-wrap", pinHtml(p), function () { selectOnMap(p.uid); }, mapState.sel === p.uid ? 20 : 10));
         b.extend({ lat: l.lat, lng: l.lng }); n++;
       });
     }
@@ -3093,7 +3120,8 @@
     tcfg().warehouses.forEach(function (w) {
       if (!w.lat) return;
       L.circle([w.lat, w.lng], { radius: Number(w.radius) || 300, color: "#6b7280", weight: 1, fillOpacity: 0.08 }).addTo(mapState.layers);
-      L.marker([w.lat, w.lng], { icon: L.divIcon({ className: "wh-label", html: esc(w.name), iconSize: null }) }).addTo(mapState.layers);
+      var lp = whLabelPos(w);
+      L.marker([lp.lat, lp.lng], { interactive: false, icon: L.divIcon({ className: "wh-label below", html: esc(w.name), iconSize: null }) }).addTo(mapState.layers);
       pts.push([w.lat, w.lng]);
     });
     if (isToday) {
@@ -3101,9 +3129,7 @@
         var l = p.live;
         if (!l || l.date !== today() || !p.open) return;
         var ll = [l.lat, l.lng];
-        L.marker(ll, { icon: L.divIcon({ className: "pin-wrap", iconSize: null,
-          html: '<div class="pin' + (p.fresh ? "" : " stale") + (mapState.sel === p.uid ? " sel" : "") + '"><b>' + esc(initials(p.name)) + "</b></div>" +
-            '<div class="pin-name">' + esc(p.name.split(" ")[0]) + "</div>" }) })
+        L.marker(ll, { zIndexOffset: mapState.sel === p.uid ? 1000 : 0, icon: L.divIcon({ className: "pin-wrap", iconSize: null, html: pinHtml(p) }) })
           .on("click", function () { selectOnMap(p.uid); }).addTo(mapState.layers);
         pts.push(ll);
       });
