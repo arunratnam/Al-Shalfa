@@ -81,13 +81,13 @@
     if (location.hash === hash) route();
     else location.hash = hash;
   }
-  function toast(msg) {
+  function toast(msg, ms) {
     var t = document.createElement("div");
     t.className = "toast";
     t.setAttribute("role", "status");
     t.textContent = msg;
     document.body.appendChild(t);
-    setTimeout(function () { t.remove(); }, 2600);
+    setTimeout(function () { t.remove(); }, ms || 2600);
   }
   function findClaim(id) {
     return st.mine.concat(st.all).filter(function (c) { return c.id === id; })[0] || null;
@@ -1848,16 +1848,34 @@
     return entries.filter(function (e) { return e.ownerUid === uid && !e.outAt; }).sort(function (a, b) { return b.inAt - a.inAt; })[0] || null;
   }
 
+  /** Why the last location attempt failed: "denied", "off" or "slow" (shown to staff so they can fix it). */
+  var locWhy = "";
   function getLocation() {
-    return new Promise(function (res) {
-      if (!navigator.geolocation) return res(null);
-      var done = false, timer = setTimeout(function () { if (!done) { done = true; res(null); } }, 9000);
-      navigator.geolocation.getCurrentPosition(function (p) {
-        if (done) return;
-        done = true; clearTimeout(timer);
-        res({ lat: Math.round(p.coords.latitude * 1e6) / 1e6, lng: Math.round(p.coords.longitude * 1e6) / 1e6, acc: Math.round(p.coords.accuracy) });
-      }, function () { if (!done) { done = true; clearTimeout(timer); res(null); } }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+    function once(high, wait) {
+      return new Promise(function (res) {
+        var done = false, timer = setTimeout(function () { if (!done) { done = true; res({ err: 3 }); } }, wait + 1000);
+        navigator.geolocation.getCurrentPosition(function (p) {
+          if (done) return;
+          done = true; clearTimeout(timer);
+          res({ loc: { lat: Math.round(p.coords.latitude * 1e6) / 1e6, lng: Math.round(p.coords.longitude * 1e6) / 1e6, acc: Math.round(p.coords.accuracy) } });
+        }, function (e) { if (!done) { done = true; clearTimeout(timer); res({ err: e && e.code }); } },
+        { enableHighAccuracy: high, timeout: wait, maximumAge: high ? 60000 : 600000 });
+      });
+    }
+    if (!navigator.geolocation) { locWhy = "off"; return Promise.resolve(null); }
+    // GPS first; inside a warehouse it can be slow, so then fall back to the phone's Wi-Fi / mobile network location
+    return once(true, 10000).then(function (r) {
+      if (r.loc || r.err === 1) return r;
+      return once(false, 10000);
+    }).then(function (r) {
+      locWhy = r.loc ? "" : r.err === 1 ? "denied" : r.err === 2 ? "off" : "slow";
+      return r.loc || null;
     });
+  }
+  function locHelp() {
+    return locWhy === "denied" ? "Location is blocked for EZ Staff: allow it in the phone's Settings → Apps → EZ Staff → Permissions → Location"
+      : locWhy === "off" ? "Location is off: turn on Location in the phone's quick settings"
+      : "Location wasn't found in time: turn on Location (and Wi-Fi) and try outside or near a door";
   }
   function distM(a, b) {
     var R = 6371000, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
@@ -1921,7 +1939,7 @@
     toast("Getting your location…");
     getLocation().then(function (loc) {
       return S.clockIn(wh, loc, today()).then(function () {
-        toast("Clocked in at " + whName(wh) + (loc ? "" : " (no location: allow location for EZ Staff)"));
+        toast("Clocked in at " + whName(wh) + (loc ? "" : ". " + locHelp()), loc ? 0 : 9000);
       });
     }).catch(function (e) { btn.disabled = false; toast(e.message); });
   }

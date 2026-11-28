@@ -164,7 +164,8 @@ public class MainActivity extends Activity {
             /** Location for clock in / out: ask Android for permission the first time. */
             @Override
             public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback cb) {
-                if (Build.VERSION.SDK_INT < 23 || checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                if (Build.VERSION.SDK_INT < 23 || checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                        || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     cb.invoke(origin, true, false);
                 } else {
                     geoOrigin = origin;

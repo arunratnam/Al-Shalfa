@@ -77,5 +77,5 @@ Ask for them before building an Android update; without the same key, phones mus
 
 ## Versions so far
 
-EZ Staff 2.5 (attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+EZ Staff 2.6 (GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
 `com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).
