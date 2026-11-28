@@ -85,7 +85,15 @@ Ask for them before building an Android update; without the same key, phones mus
 - Rules: only tracked, active people write their own `live`/`route`; office reads. iPhone/PC can't track in the background.
 - `TrackSender` has no Android dependencies: test it on the JVM with the android-all jar against the emulator.
 
+## Arabic (2.8)
+
+- `web/i18n.js` translates the screens as they are drawn (MutationObserver), with `dir="rtl"`. Dictionary `AR`
+  ("English text": "Arabic"), `PATTERNS` for dynamic text; a sentence is either fully translated or left in English.
+  Elements with `data-notr` are skipped. PDFs stay English.
+- Language: English / العربية buttons on the sign-in page and Profile; saved in `users/{uid}.lang` and localStorage.
+- Vehicle number is optional for accounts (still needed on a fuel claim).
+
 ## Versions so far
 
-EZ Staff 2.7 (live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+EZ Staff 2.8 (Arabic, live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
 `com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).

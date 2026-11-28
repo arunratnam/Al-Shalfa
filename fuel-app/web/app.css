@@ -453,3 +453,9 @@ tr.tot td { background: var(--surface-2); }
 .map-info { position: absolute; left: 10px; bottom: 22px; z-index: 500; background: var(--surface); color: var(--fg); padding: 8px 12px; border-radius: 12px; font-size: 13px; box-shadow: 0 2px 10px rgba(0,0,0,.2); max-width: calc(100% - 20px); }
 .track-note { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--muted); margin: 10px 0 2px; }
 .track-note svg { width: 16px; height: 16px; flex: none; margin-top: 1px; color: #16a34a; }
+
+/* language */
+.lang-pick { display: flex; gap: 8px; justify-content: center; margin: 0 0 12px; }
+html[lang="ar"] body { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", system-ui, sans-serif; }
+html[dir="rtl"] .map, html[dir="rtl"] .sig-img, html[dir="rtl"] canvas { direction: ltr; }
+html[dir="rtl"] .link[style*="text-align:left"] { text-align: right !important; }

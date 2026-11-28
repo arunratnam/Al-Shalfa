@@ -390,8 +390,28 @@
     }
     top.hidden = false;
     top.innerHTML = '<img class="logo" src="img/logo.png" alt="EZ Storage">' +
-      '<div class="title"><b>EZ Staff</b><span>' + esc(st.user.name) + " · " + esc(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
+      '<div class="title"><b>EZ Staff</b><span>' + esc(st.user.name) + (function (x) { return x ? " · " + esc(x) : ""; })(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
       '<a class="avatar" href="#/profile" aria-label="Your profile">' + esc(initials(st.user.name)) + "</a>";
+  }
+
+  // ------------------------------------------------------------------ language
+
+  function curLang() { return window.EZ_I18N ? EZ_I18N.lang : "en"; }
+  /** English / العربية switch (the Arabic label is never translated). */
+  function langPicker() {
+    return '<div class="lang-pick" data-notr>' + [["en", "English"], ["ar", "العربية"]].map(function (l) {
+      return '<button type="button" class="chip' + (curLang() === l[0] ? " on" : "") + '" data-act="lang" data-v="' + l[0] + '">' + l[1] + "</button>";
+    }).join("") + "</div>";
+  }
+  function setLang(l, save) {
+    if (!window.EZ_I18N) return;
+    // keep what was typed on the sign-up form
+    var keep = {};
+    document.querySelectorAll("#auth-form input, #auth-form select").forEach(function (x) { if (x.name && x.type !== "password") keep[x.name] = x.value; });
+    EZ_I18N.set(l);
+    if (save && st.user && !LOCAL && st.user.lang !== l) S.updateProfile({ lang: l }).catch(function () {});
+    route();
+    Object.keys(keep).forEach(function (k) { var x = document.querySelector('#auth-form [name="' + k + '"]'); if (x) x.value = keep[k]; });
   }
 
   // ------------------------------------------------------------------ login
@@ -399,7 +419,7 @@
   function viewLogin() {
     var demo = S.mode === "demo";
     var h = '<div class="login"><div class="box"><div class="brand"><img src="img/logo.png" alt="EZ Storage">' +
-      "<h1>Fuel Expense Claims</h1><p class=\"sub\" style=\"margin:4px 0 0\">Submit fuel receipts, track approval and get reimbursed.</p></div>";
+      "<h1>" + (LOCAL ? "Fuel Expense Claims" : "EZ Staff") + "</h1><p class=\"sub\" style=\"margin:4px 0 0\">" + (LOCAL ? "Submit fuel receipts, track approval and get reimbursed." : "Attendance, overtime and fuel claims for EZ Storage staff.") + "</p></div>";
     if (demo) {
       h += '<div class="banner warn" style="margin-bottom:14px">Demo mode: the app isn\'t connected to the company database yet. Pick a person to try it. Data stays on this device.</div><div class="stack">';
       S.demoUsers().forEach(function (u) {
@@ -409,12 +429,13 @@
       return h;
     }
     var t = st.loginTab;
-    h += '<div class="card"><div class="tabs"><button data-act="login-tab" data-tab="in" class="' + (t === "in" ? "on" : "") + '">Sign in</button><button data-act="login-tab" data-tab="up" class="' + (t === "up" ? "on" : "") + '">Create account</button></div>';
+    h += langPicker() + '<div class="card"><div class="tabs"><button data-act="login-tab" data-tab="in" class="' + (t === "in" ? "on" : "") + '">Sign in</button><button data-act="login-tab" data-tab="up" class="' + (t === "up" ? "on" : "") + '">Create account</button></div>';
     h += '<form id="auth-form" class="stack" novalidate>';
     if (t === "up") {
       h += field("name", "Full name", "text", "", 'autocomplete="name" required') +
         '<div class="grid2">' + field("employeeId", "Employee ID", "text", "", "required") + selectField("department", "Department", C.departments, "") + "</div>" +
-        field("vehicle", "Vehicle number", "text", "", 'placeholder="e.g. KWT 12-34567"');
+        field("vehicle", "Vehicle number (optional)", "text", "", 'placeholder="e.g. KWT 12-34567"') +
+        '<input type="hidden" name="lang" value="' + curLang() + '">';
     }
     h += field("email", "Work email", "email", "", 'autocomplete="email" required inputmode="email"') +
       field("password", "Password", "password", "", 'autocomplete="' + (t === "up" ? "new-password" : "current-password") + '" required minlength="6"') +
@@ -1249,8 +1270,9 @@
     var h = '<h1>Profile</h1><p class="sub">' + (LOCAL ? "These details go on every claim form." : esc(u.email || "") + " · " + esc(S.ROLE_LABELS[u.role] || u.role)) + "</p>" +
       '<form id="profile-form" class="card stack">' + field("name", "Full name", "text", u.name, "required") +
       '<div class="grid2">' + field("employeeId", "Employee ID", "text", u.employeeId || "", "") + selectField("department", "Department", C.departments, u.department || "") + "</div>" +
-      field("vehicle", "Vehicle number", "text", u.vehicle || "", 'placeholder="e.g. KWT 12-34567"') +
+      field("vehicle", "Vehicle number (optional)", "text", u.vehicle || "", 'placeholder="e.g. KWT 12-34567"') +
       '<button class="btn primary" type="submit">Save profile</button></form>' +
+      '<div class="section-title"><h2>Language</h2></div>' + langPicker() +
       (true ? '<div class="section-title"><h2>Signature</h2></div><div class="card spread">' +
         (u.signature ? '<img class="sig-img" alt="Your saved signature" src="' + esc(u.signature) + '">' : '<span class="sub" style="margin:0">Not set yet. You sign once, on your first claim.</span>') +
         '<button class="btn small" data-act="change-sig">' + (u.signature ? "Change" : "Add signature") + "</button></div>" : "") +
@@ -2452,7 +2474,7 @@
     if (st.user.active === false) {
       $main.innerHTML = st.user.pending
         ? '<div class="login"><div class="box card stack" style="text-align:center"><img src="img/logo.png" alt="EZ Storage" style="width:150px;margin:0 auto">' +
-          '<h1>Waiting for approval</h1><p class="sub" style="margin:0">Your account (' + esc(st.user.email || "") + ') was created. The admin needs to allow it before you can add fuel bills. This page opens by itself once you are allowed.</p>' +
+          '<h1>Waiting for approval</h1><p class="sub" style="margin:0">Your account (' + esc(st.user.email || "") + ') was created. The admin needs to allow it before you can use the app. This page opens by itself once you are allowed.</p>' +
           '<button class="btn" data-act="signout">Sign out</button></div></div>'
         : '<div class="card empty"><b>Your account is turned off</b>Ask the admin to turn it back on.<div style="margin-top:14px"><button class="btn" data-act="signout">Sign out</button></div></div>';
       return;
@@ -2525,6 +2547,7 @@
         S.resetPassword(em).then(function () { toast("Password reset email sent to " + em); }).catch(function (x) { toast(x.message); });
         break;
       case "map-sel": selectOnMap(el.getAttribute("data-uid")); break;
+      case "lang": setLang(el.getAttribute("data-v"), true); break;
       case "signout": S.signOut(); location.hash = "#/home"; break;
       case "reset-demo": S.resetDemo(); toast("Demo data reset"); break;
       case "theme": localStorage.setItem("ezfuel-theme", el.getAttribute("data-v")); applyTheme(); route(); break;
@@ -3000,6 +3023,7 @@
         var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role || st.user.active !== user.active || st.user.fuel !== user.fuel || st.user.track !== user.track;
         st.user = user;
         st.ready = true;
+        if (user && user.lang && window.EZ_I18N && user.lang !== EZ_I18N.lang) EZ_I18N.set(user.lang);
         if (roleChanged) subscribe();
         route();
       });

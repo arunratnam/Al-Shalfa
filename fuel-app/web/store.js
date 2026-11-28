@@ -221,7 +221,7 @@
         return Promise.resolve(profile);
       },
       updateProfile: function (f) {
-        ["name", "employeeId", "department", "vehicle", "signature"].forEach(function (k) { if (k in f) profile[k] = f[k]; });
+        ["name", "employeeId", "department", "vehicle", "signature", "lang"].forEach(function (k) { if (k in f) profile[k] = f[k]; });
         write(PROFILE, profile);
         tellAuth();
         return Promise.resolve(profile);
@@ -437,7 +437,7 @@
         var f = JSON.parse(sessionStorage.getItem("ezfuel-signup") || "{}");
         var p2 = {
           name: f.name || user.email.split("@")[0], email: user.email, employeeId: f.employeeId || "",
-          department: f.department || "", vehicle: f.vehicle || "", role: "driver", active: false, pending: true, fuel: false, createdAt: now()
+          department: f.department || "", vehicle: f.vehicle || "", lang: f.lang === "ar" ? "ar" : "en", role: "driver", active: false, pending: true, fuel: false, createdAt: now()
         };
         return db.collection("users").doc(user.uid).set(p2).then(function () {
           sessionStorage.removeItem("ezfuel-signup");
@@ -517,7 +517,7 @@
       },
       updateProfile: function (f) {
         var allowed = {};
-        ["name", "employeeId", "department", "vehicle", "signature"].forEach(function (k) { if (k in f) allowed[k] = f[k]; });
+        ["name", "employeeId", "department", "vehicle", "signature", "lang"].forEach(function (k) { if (k in f) allowed[k] = f[k]; });
         return db.collection("users").doc(current.uid).update(allowed).then(function () {
           for (var k in allowed) current[k] = allowed[k];
           tellAuth();

@@ -1,6 +1,6 @@
 /* Keeps the app's own files on the phone so it opens without a connection. */
-var CACHE = "ezfuel-v2";
-var FILES = ["./", "index.html", "app.css", "app.js", "store.js", "pdf.js", "config.js", "manifest.webmanifest",
+var CACHE = "ezfuel-v3";
+var FILES = ["./", "index.html", "app.css", "app.js", "store.js", "i18n.js", "pdf.js", "config.js", "manifest.webmanifest",
   "img/logo.png", "img/logo.js", "img/icon-192.png", "img/icon-512.png", "img/apple-touch-icon.png",
   "vendor/jspdf.umd.min.js", "vendor/firebase-app-compat.js", "vendor/firebase-auth-compat.js", "vendor/firebase-firestore-compat.js"];
 
