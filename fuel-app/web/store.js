@@ -486,7 +486,7 @@
               if (!s.exists || !current || current.uid !== user.uid) return;
               var x = s.data();
               x.uid = user.uid;
-              if (x.active !== current.active || x.role !== current.role || x.pending !== current.pending || x.fuel !== current.fuel) {
+              if (x.active !== current.active || x.role !== current.role || x.pending !== current.pending || x.fuel !== current.fuel || x.track !== current.track) {
                 current = x;
                 cb(x);
               } else {
@@ -510,6 +510,7 @@
         return auth.sendPasswordResetEmail(email).catch(function (e) { throw friendly(e); });
       },
       signOut: function () {
+        try { if (window.EZAndroid && window.EZAndroid.stopTracking) window.EZAndroid.stopTracking(); } catch (e) {}
         if (store.unwatchMe) store.unwatchMe();
         store.unwatchMe = null;
         return auth.signOut();
@@ -678,6 +679,19 @@
       },
 
       // ---- salaries (admin and managers only) ----
+      /** Live positions of people on duty (office only). */
+      watchLive: function (cb) {
+        return db.collection("live").onSnapshot(function (snap) { cb(list(snap)); }, function () { cb([]); });
+      },
+      /** One person's route for one day: {points: [{t, lat, lng, acc}]} or null. */
+      watchRoute: function (uid, date, cb) {
+        return db.collection("route").doc(uid + "_" + date).onSnapshot(function (d) { cb(d.exists ? d.data() : null); }, function () { cb(null); });
+      },
+      /** What the Android app needs to send on-duty locations as this person. */
+      trackingInfo: function () {
+        var u = auth.currentUser;
+        return u && current ? { apiKey: cfg.apiKey, projectId: cfg.projectId, uid: u.uid, name: current.name || "", refreshToken: u.refreshToken, intervalSec: 120 } : null;
+      },
       watchPay: function (cb) {
         return db.collection("pay").onSnapshot(function (snap) {
           var m = {};

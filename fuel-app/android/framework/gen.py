@@ -30,7 +30,7 @@ ATTRS = {
     "targetSdkVersion": ("integer|string", None, None),
     "maxSdkVersion": ("integer", None, None),
     "allowBackup": ("boolean", None, None),
-    "foregroundServiceType": (None, None, {"specialUse": 0x40000000}),
+    "foregroundServiceType": (None, None, {"location": 0x08, "specialUse": 0x40000000}),
     "permission": ("string", None, None),
     "resource": ("reference", None, None),
     "excludeFromRecents": ("boolean", None, None),

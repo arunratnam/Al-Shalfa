@@ -18,6 +18,7 @@ service cloud.firestore {
     function was(s) { return resource.data.status == s; }
     function now(s) { return request.resource.data.status == s; }
     function fuelAllowed() { return me().get('fuel', true) != false; }
+    function tracked() { return me().get('track', false) == true; }
 
     // ---- people ----
     match /users/{uid} {
@@ -26,7 +27,7 @@ service cloud.firestore {
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role == 'driver' && request.resource.data.active == false && request.resource.data.pending == true;
       // people edit their own details, never their role or whether they are allowed
-      allow update: if (signedIn() && request.auth.uid == uid && !changes().hasAny(['role', 'active', 'pending', 'fuel', 'email', 'allowedAt', 'allowedBy'])) || isAdmin();
+      allow update: if (signedIn() && request.auth.uid == uid && !changes().hasAny(['role', 'active', 'pending', 'fuel', 'track', 'email', 'allowedAt', 'allowedBy'])) || isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -126,6 +127,21 @@ service cloud.firestore {
                         && request.resource.data.ownerUid == request.auth.uid
                         && !request.resource.data.keys().hasAny(['approvedMin', 'decidedBy', 'decidedByUid', 'decidedAt']))
         || (isOffice() && resource.data.ownerUid != request.auth.uid && request.resource.data.ownerUid == resource.data.ownerUid);
+      allow delete: if isAdmin();
+    }
+
+    // ---- live location while on duty (Android app, people the admin switched on) ----
+    match /live/{uid} {
+      allow read: if isOffice() || (signedIn() && request.auth.uid == uid);
+      allow write: if active() && tracked() && request.auth.uid == uid && request.resource.data.ownerUid == uid;
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
+    }
+    // today's route per person ({uid}_{date})
+    match /route/{id} {
+      allow read: if isOffice() || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create, update: if active() && tracked() && request.resource.data.ownerUid == request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.date
+        && (resource == null || resource.data.ownerUid == request.auth.uid);
       allow delete: if isAdmin();
     }
 

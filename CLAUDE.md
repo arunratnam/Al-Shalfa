@@ -75,7 +75,17 @@ Ask for them before building an Android update; without the same key, phones mus
   `fuel: false`; accounts without the field keep fuel. The admin ticks **Fuel allowance** per person on People.
 - Rules: bills and claims create require `me().get('fuel', true) != false`; people can't change their own `fuel`.
 
+## Live location (2.7)
+
+- `users/{uid}.track == true` (admin ticks **Live location on duty** on People). While that person is clocked in, the
+  Android app runs `TrackService` (foreground service, type location, permanent notification; stops at clock out, sign out
+  or after 16 h). It sends a point about every 2 min when moving (every 10 min when still) via `TrackSender`
+  (Firestore REST `:commit` with the user's refresh token): `live/{uid}` (latest) and `route/{uid}_{date}` (`points` appended).
+- Office sees it in Time → **Live map** (Leaflet in `web/vendor/leaflet`, OpenStreetMap tiles): pins, today's route, past days.
+- Rules: only tracked, active people write their own `live`/`route`; office reads. iPhone/PC can't track in the background.
+- `TrackSender` has no Android dependencies: test it on the JVM with the android-all jar against the emulator.
+
 ## Versions so far
 
-EZ Staff 2.6 (GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+EZ Staff 2.7 (live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
 `com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).

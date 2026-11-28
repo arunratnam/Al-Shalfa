@@ -50,6 +50,7 @@ public class MainActivity extends Activity {
     static final String START = "https://" + HOST + "/web/index.html";
     private static final int REQ_FILE = 1;
     private static final int REQ_LOCATION = 2;
+    private static final int REQ_NOTIFY = 3;
     private String geoOrigin;
     private GeolocationPermissions.Callback geoCallback;
 
@@ -352,6 +353,35 @@ public class MainActivity extends Activity {
 
     /** Called from the web app to save or share PDFs and spreadsheets. */
     class Bridge {
+        /** Live location while on duty: started at clock in with the signed-in account (JSON from the web app). */
+        @JavascriptInterface
+        public String startTracking(String json) {
+            try {
+                org.json.JSONObject j = new org.json.JSONObject(json);
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                    runOnUiThread(new Runnable() {
+                        public void run() {
+                            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, REQ_NOTIFY);
+                        }
+                    });
+                }
+                return TrackService.start(MainActivity.this, j.getString("apiKey"), j.getString("projectId"), j.getString("uid"),
+                        j.optString("name", ""), j.getString("refreshToken"), j.optInt("intervalSec", 120));
+            } catch (Exception e) {
+                return "error: " + e.getMessage();
+            }
+        }
+
+        @JavascriptInterface
+        public void stopTracking() {
+            TrackService.stop(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public boolean isTracking() {
+            return TrackService.running(MainActivity.this);
+        }
+
         @JavascriptInterface
         public boolean saveFile(String base64, String name, String mime) {
             try {

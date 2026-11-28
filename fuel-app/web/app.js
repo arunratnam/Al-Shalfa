@@ -10,7 +10,7 @@
     user: null, ready: false, mine: [], all: [], users: [], allError: null,
     unsub: [], filter: { status: "all", month: "all", driver: "all", q: "" }, officeTab: "queue",
     draft: null, step: 1, photoCache: {}, loginTab: "in", bills: [], allBills: [], office: { driver: "all", month: "all", timeStaff: "all" },
-    att: [], allAtt: [], ot: [], allOt: [], pay: {}, settings: null
+    att: [], allAtt: [], ot: [], allOt: [], pay: {}, settings: null, live: [], attLoaded: false, trackKey: "", trackMsg: ""
   };
 
   // ------------------------------------------------------------------ helpers
@@ -60,6 +60,9 @@
   function isAdmin() { return role() === "admin"; }
   /** Fuel allowance: people without it only use attendance. Accounts from before this setting keep fuel. */
   function hasFuel(u) { return LOCAL || !u || u.fuel !== false; }
+  /** Live location while on duty (Android app), switched on per person by the admin. */
+  function hasTrack(u) { return !LOCAL && !!u && u.track === true; }
+  function canTrackHere() { return !!(window.EZAndroid && window.EZAndroid.startTracking); }
   function isOffice() { return ["supervisor", "manager", "admin"].indexOf(role()) >= 0; }
   function canApprove() { return role() === "manager" || role() === "admin"; }
   /** What the signed-in person may do with a claim (never on their own claim). */
@@ -94,6 +97,7 @@
   }
 
   var ICON = {
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
     list: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -1225,7 +1229,8 @@
         return '<option value="' + esc(sh.id) + '"' + (shiftOf(u).id === sh.id ? " selected" : "") + ">" + esc(shiftLabel(sh)) + "</option>";
       }).join("") + "</select>";
       var fuelTog = '<label class="fuel-tog"><input type="checkbox" data-fuel="' + esc(u.uid) + '"' + (hasFuel(u) ? " checked" : "") + "> Fuel allowance</label>";
-      btn = pick + shiftPick + fuelTog + btn;
+      var trackTog = '<label class="fuel-tog"><input type="checkbox" data-track="' + esc(u.uid) + '"' + (hasTrack(u) ? " checked" : "") + "> Live location on duty</label>";
+      btn = pick + shiftPick + fuelTog + trackTog + btn;
       return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + (me ? " (you)" : "") + "</b><span>" + esc(u.email || "") +
         " · " + esc(u.employeeId || "no ID") + " · " + esc(u.vehicle || "no vehicle") + '</span></div><div class="side">' + state + btn + "</div></div>";
     }).join("");
@@ -1931,6 +1936,11 @@
           return '<button class="wh-btn" data-act="att-in" data-wh="' + esc(w.id) + '"><b>' + esc(w.name) + "</b><span>Clock in</span></button>";
         }).join("") + "</div>";
     }
+    if (hasTrack(st.user) && openEntry(st.att, st.user.uid)) {
+      h += '<div class="track-note">' + ICON.pin + "<span>" + (canTrackHere()
+        ? (st.trackMsg || "Your location is shared with the office until you clock out.")
+        : "Live location works in the EZ Staff Android app. On this phone only your clock in and out places are saved.") + "</span></div>";
+    }
     return h + '<a class="link" href="' + myHref("time") + '" style="text-align:left">My time and overtime →</a></div>';
   }
 
@@ -2068,13 +2078,14 @@
 
   function viewTimeOffice(tab, m) {
     tab = tab || "now";
-    var tabs = [["now", "Who's in"], ["ot", "Overtime to approve"], ["entries", "Time entries"], ["sites", "Warehouses"]];
+    var tabs = [["now", "Who's in"], ["map", "Live map"], ["ot", "Overtime to approve"], ["entries", "Time entries"], ["sites", "Warehouses"]];
     var h = '<div class="spread"><h1>Time</h1><button class="btn small primary" data-act="entry-add">+ Add entry</button></div><p class="sub">Live attendance from all warehouses · ' + esc(fmtDate(today())) + "</p>" +
       '<div class="chips" style="margin-bottom:14px">' + tabs.map(function (t) {
         var n = t[0] === "ot" ? st.allOt.filter(function (o) { return o.status === "pending" && o.ownerUid !== st.user.uid; }).length : 0;
         return '<a class="chip' + (tab === t[0] ? " on" : "") + '" href="#/time/' + t[0] + '">' + t[1] + (n ? '<span class="n">' + n + "</span>" : "") + "</a>";
       }).join("") + "</div>";
     if (tab === "now") return h + timeNow();
+    if (tab === "map") return h + viewMap(m);
     if (tab === "ot") return h + timeOtQueue();
     if (tab === "entries") return h + timeEntries(m);
     return h + timeSites(m);
@@ -2486,7 +2497,9 @@
       case "profile": html = viewProfile(); break;
       default: html = viewHome();
     }
+    if (mapState.map) closeMap();
     $main.innerHTML = html;
+    if (document.getElementById("map")) openMap();
     var sig = document.getElementById("d-sig");
     if (sig) draftPad = signaturePad(sig);
     loadThumbs();
@@ -2511,6 +2524,7 @@
         if (!em) { toast("Type your email first, then tap Forgot password."); break; }
         S.resetPassword(em).then(function () { toast("Password reset email sent to " + em); }).catch(function (x) { toast(x.message); });
         break;
+      case "map-sel": selectOnMap(el.getAttribute("data-uid")); break;
       case "signout": S.signOut(); location.hash = "#/home"; break;
       case "reset-demo": S.resetDemo(); toast("Demo data reset"); break;
       case "theme": localStorage.setItem("ezfuel-theme", el.getAttribute("data-v")); applyTheme(); route(); break;
@@ -2656,6 +2670,10 @@
     var t = e.target;
     if (t.hasAttribute("data-role")) {
       S.setUser(t.getAttribute("data-role"), { role: t.value }).then(function () { toast("Role changed to " + (S.ROLE_LABELS[t.value] || t.value)); }).catch(function (x) { toast(x.message); });
+    } else if (t.hasAttribute("data-mapdate")) {
+      if (t.value) { mapState.sel = mapState.sel || null; location.hash = "#/time/map/" + t.value; }
+    } else if (t.hasAttribute("data-track")) {
+      S.setUser(t.getAttribute("data-track"), { track: t.checked }).then(function () { toast(t.checked ? "Live location on: shared while on duty (Android app)" : "Live location off"); }).catch(function (x) { toast(x.message); });
     } else if (t.hasAttribute("data-fuel")) {
       S.setUser(t.getAttribute("data-fuel"), { fuel: t.checked }).then(function () { toast(t.checked ? "Fuel allowance on" : "Fuel allowance off: attendance only"); }).catch(function (x) { toast(x.message); });
     } else if (t.hasAttribute("data-shift")) {
@@ -2734,6 +2752,194 @@
 
   // ------------------------------------------------------------------ start
 
+
+  /* ---------- live location (Android) ---------- */
+
+  /** Starts sharing location at clock in and stops at clock out (or sign out, or when the admin switches it off). */
+  function syncTracking() {
+    if (!canTrackHere()) return;
+    var on = !!(st.user && st.user.active !== false && hasTrack(st.user) && st.attLoaded && openEntry(st.att, st.user.uid));
+    var key = on ? "on:" + st.user.uid : (st.user && !st.attLoaded && hasTrack(st.user) ? st.trackKey : "off");
+    if (key === st.trackKey) return;
+    st.trackKey = key;
+    try {
+      if (on) {
+        var info = S.trackingInfo && S.trackingInfo();
+        if (!info) { st.trackKey = ""; return; }
+        var r = window.EZAndroid.startTracking(JSON.stringify(info));
+        st.trackMsg = r === "ok" ? "" : r === "no-permission"
+          ? "Location is blocked, so the office can't see where you are. Allow it in Settings → Apps → EZ Staff → Permissions → Location."
+          : "Live location couldn't start (" + r + ").";
+        if (r !== "ok") st.trackKey = "";
+      } else {
+        st.trackMsg = "";
+        window.EZAndroid.stopTracking();
+      }
+    } catch (e) {}
+  }
+
+  var mapState = { map: null, layers: null, sel: null, date: null, route: null, unRoute: null, fitted: false };
+
+  function viewMap(date) {
+    date = date || today();
+    mapState.date = date;
+    return '<div class="card flush"><div id="map" class="map"></div></div>' +
+      '<div class="spread" style="margin:14px 0 8px"><h2 style="margin:0">People on the map</h2>' +
+      '<input type="date" class="mini-date" data-mapdate="1" aria-label="Route date" value="' + esc(date) + '" max="' + esc(today()) + '"></div>' +
+      '<div class="card flush list" id="map-list"></div>' +
+      '<p class="sub" style="font-size:13px">Live location is shared from the EZ Staff Android app while people are clocked in, if you ticked ' +
+      '<b>Live location on duty</b> for them on the People page. Tap a person to see their route for the day.</p>';
+  }
+
+  function loadLeaflet() {
+    if (window.L) return Promise.resolve();
+    if (loadLeaflet.p) return loadLeaflet.p;
+    loadLeaflet.p = new Promise(function (res, rej) {
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "vendor/leaflet/leaflet.css";
+      document.head.appendChild(css);
+      var js = document.createElement("script");
+      js.src = "vendor/leaflet/leaflet.js";
+      js.onload = function () { res(); };
+      js.onerror = function () { loadLeaflet.p = null; rej(new Error("The map couldn't load. Check the connection.")); };
+      document.head.appendChild(js);
+    });
+    return loadLeaflet.p;
+  }
+
+  function openMap() {
+    var el = document.getElementById("map");
+    mapState.map = "loading";
+    loadLeaflet().then(function () {
+      if (!document.getElementById("map") || document.getElementById("map") !== el) return;
+      var m = L.map(el, { zoomControl: true, attributionControl: true });
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(m);
+      m.setView([29.2, 48.0], 10); // Kuwait
+      mapState.map = m;
+      mapState.layers = L.layerGroup().addTo(m);
+      mapState.fitted = false;
+      if (mapState.sel) watchSelRoute();
+      drawMap();
+    }).catch(function (e) {
+      mapState.map = null;
+      el.innerHTML = '<div class="empty" style="padding:30px">' + esc(e.message) + "</div>";
+    });
+  }
+
+  function closeMap() {
+    if (mapState.unRoute) { mapState.unRoute(); mapState.unRoute = null; }
+    if (mapState.map && mapState.map.remove) { try { mapState.map.remove(); } catch (e) {} }
+    mapState.map = null;
+    mapState.layers = null;
+  }
+
+  function watchSelRoute() {
+    if (mapState.unRoute) mapState.unRoute();
+    mapState.route = null;
+    mapState.unRoute = mapState.sel ? S.watchRoute(mapState.sel, mapState.date || today(), function (r) {
+      mapState.route = r;
+      mapState.fitRoute = true;
+      drawMap();
+    }) : null;
+  }
+
+  function ago(t) {
+    var min = Math.round((Date.now() - t) / 60000);
+    return min < 1 ? "just now" : min < 60 ? min + " min ago" : hm(min) + " ago";
+  }
+
+  function mapPeople() {
+    var date = mapState.date || today(), isToday = date === today();
+    var byUid = {};
+    st.users.forEach(function (u) { if (hasTrack(u) && !u.pending) byUid[u.uid] = { uid: u.uid, name: u.name || u.email, live: null, open: null }; });
+    st.live.forEach(function (l) {
+      if (!byUid[l.ownerUid]) byUid[l.ownerUid] = { uid: l.ownerUid, name: l.name || "", live: null, open: null };
+      byUid[l.ownerUid].live = l;
+    });
+    Object.keys(byUid).forEach(function (k) { byUid[k].open = openEntry(st.allAtt, k); });
+    return Object.keys(byUid).map(function (k) {
+      var p = byUid[k], l = p.live;
+      p.fresh = isToday && l && l.date === date && p.open && Date.now() - l.t < 15 * 60000;
+      p.status = !isToday ? "" : p.open ? (l && l.date === date ? (p.fresh ? "On duty · " + ago(l.t) : "No signal · last " + ago(l.t)) : "On duty · no location yet") : "Off duty";
+      return p;
+    }).sort(function (a, b) { return (b.open ? 1 : 0) - (a.open ? 1 : 0) || a.name.localeCompare(b.name); });
+  }
+
+  function drawMap() {
+    var list = document.getElementById("map-list");
+    var people = mapPeople(), isToday = (mapState.date || today()) === today();
+    if (list) {
+      list.innerHTML = people.length ? people.map(function (p) {
+        return '<button class="item map-row' + (mapState.sel === p.uid ? " sel" : "") + '" data-act="map-sel" data-uid="' + esc(p.uid) + '">' +
+          '<span class="dot ' + (p.fresh ? "on" : p.open ? "warn" : "") + '"></span><span class="grow"><b>' + esc(p.name) + "</b>" +
+          (p.status ? '<span class="sub">' + esc(p.status) + "</span>" : "") + "</span>" +
+          '<span class="link">' + (mapState.sel === p.uid ? "Showing route" : "Route") + "</span></button>";
+      }).join("") : '<div class="empty" style="padding:20px">Nobody has live location yet. Tick <b>Live location on duty</b> for drivers on the People page.</div>';
+    }
+    var m = mapState.map;
+    if (!m || !m.addLayer) return;
+    mapState.layers.clearLayers();
+    var pts = [];
+    tcfg().warehouses.forEach(function (w) {
+      if (!w.lat) return;
+      L.circle([w.lat, w.lng], { radius: Number(w.radius) || 300, color: "#6b7280", weight: 1, fillOpacity: 0.08 }).addTo(mapState.layers);
+      L.marker([w.lat, w.lng], { icon: L.divIcon({ className: "wh-label", html: esc(w.name), iconSize: null }) }).addTo(mapState.layers);
+      pts.push([w.lat, w.lng]);
+    });
+    if (isToday) {
+      people.forEach(function (p) {
+        var l = p.live;
+        if (!l || l.date !== today() || !p.open) return;
+        var ll = [l.lat, l.lng];
+        L.marker(ll, { icon: L.divIcon({ className: "pin-wrap", iconSize: null,
+          html: '<div class="pin' + (p.fresh ? "" : " stale") + (mapState.sel === p.uid ? " sel" : "") + '"><b>' + esc(initials(p.name)) + "</b></div>" +
+            '<div class="pin-name">' + esc(p.name.split(" ")[0]) + "</div>" }) })
+          .on("click", function () { selectOnMap(p.uid); }).addTo(mapState.layers);
+        pts.push(ll);
+      });
+    }
+    var r = mapState.route && mapState.route.points ? mapState.route.points.slice().sort(function (a, b) { return a.t - b.t; }) : [];
+    if (mapState.sel && r.length) {
+      var line = r.map(function (x) { return [x.lat, x.lng]; });
+      L.polyline(line, { color: "#c8102e", weight: 4, opacity: 0.8 }).addTo(mapState.layers);
+      L.circleMarker(line[0], { radius: 6, color: "#15803d", fillColor: "#15803d", fillOpacity: 1 }).bindTooltip("Start " + hhmm(r[0].t)).addTo(mapState.layers);
+      L.circleMarker(line[line.length - 1], { radius: 6, color: "#c8102e", fillColor: "#fff", fillOpacity: 1, weight: 3 })
+        .bindTooltip("Last " + hhmm(r[r.length - 1].t)).addTo(mapState.layers);
+      if (mapState.fitRoute) { m.fitBounds(L.latLngBounds(line).pad(0.2), { maxZoom: 16 }); mapState.fitRoute = false; mapState.fitted = true; }
+    } else if (!mapState.fitted && pts.length) {
+      m.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 15 });
+      mapState.fitted = true;
+    }
+    var info = document.getElementById("map-info");
+    if (info) info.remove();
+    if (mapState.sel) {
+      var who = people.filter(function (p) { return p.uid === mapState.sel; })[0];
+      var km = 0;
+      for (var i = 1; i < r.length; i++) km += distM(r[i - 1], r[i]);
+      var div = document.createElement("div");
+      div.id = "map-info";
+      div.className = "map-info";
+      div.innerHTML = "<b>" + esc(who ? who.name : "") + "</b> · " + esc(fmtDate(mapState.date || today())) + "<br>" +
+        (r.length ? plural(r.length, "point") + " · " + hhmm(r[0].t) + "–" + hhmm(r[r.length - 1].t) + " · about " + (km / 1000).toFixed(1) + " km" : "No route for this day");
+      document.getElementById("map").appendChild(div);
+    }
+  }
+
+  function selectOnMap(uid) {
+    mapState.sel = mapState.sel === uid ? null : uid;
+    if (!mapState.sel) mapState.fitted = false;
+    watchSelRoute();
+    drawMap();
+  }
+
+  function hhmm(t) {
+    var d = new Date(t);
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
   function subscribe() {
     st.unsub.forEach(function (u) { try { u(); } catch (e) {} });
     st.unsub = [];
@@ -2744,16 +2950,17 @@
     st.allAtt = [];
     st.ot = [];
     st.allOt = [];
+    st.live = [];
+    st.attLoaded = false;
     st.pay = {};
     st.all = [];
     st.users = [];
-    if (!st.user) return;
-    if (st.user.active === false) return; // waiting to be allowed
+    if (!st.user || st.user.active === false) { syncTracking(); return; }
     st.unsub.push(S.watchClaims("mine", function (list) { st.mine = list; refresh(); }));
     st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
     if (!LOCAL) {
       st.unsub.push(S.watchSettings(function (x) { st.settings = x; refresh(); }));
-      st.unsub.push(S.watchAttendance("mine", null, function (list) { st.att = list; refresh(); }));
+      st.unsub.push(S.watchAttendance("mine", null, function (list) { st.att = list; st.attLoaded = true; syncTracking(); refresh(); }));
       st.unsub.push(S.watchOt("mine", function (list) { st.ot = list; refresh(); }));
     }
     if (isOffice()) {
@@ -2764,6 +2971,7 @@
       st.unsub.push(S.watchBills(function (list) { st.allBills = list; refresh(); }, "all"));
       st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
       st.unsub.push(S.watchUsers(function (list) { st.users = list; refresh(); }));
+      st.unsub.push(S.watchLive(function (list) { st.live = list; if (mapState.map) drawMap(); }));
     }
   }
 
@@ -2772,6 +2980,7 @@
     // don't redraw while the person is filling in the claim form or a dialog is open
     var page = (location.hash || "").slice(2).split("/")[0];
     if (page === "new" || page === "edit" || page === "make-claim" || page === "settings" || document.querySelector(".scrim")) return;
+    if (mapState.map && document.getElementById("map")) { drawMap(); return; }
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(route, 60);
   }
@@ -2788,7 +2997,7 @@
     route();
     S.init().then(function () {
       S.onAuth(function (user) {
-        var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role || st.user.active !== user.active || st.user.fuel !== user.fuel;
+        var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role || st.user.active !== user.active || st.user.fuel !== user.fuel || st.user.track !== user.track;
         st.user = user;
         st.ready = true;
         if (roleChanged) subscribe();
