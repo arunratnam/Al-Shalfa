@@ -2296,9 +2296,10 @@
     if (!isAdmin()) return '<div class="card empty"><b>Admin only</b></div>';
     var c = tcfg();
     var h = '<h1>Company settings</h1><p class="sub">Warehouses, shifts, overtime rules and public holidays.</p><form id="settings-form" class="stack">' +
-      '<div class="card stack"><div class="eyebrow">Warehouses</div><p class="sub" style="margin:0;font-size:13px">Stand at the warehouse and tap <b>Use my location here</b>, so the app can show if someone clocks in far away.</p>' +
+      '<div class="card stack"><div class="eyebrow">Warehouses</div><p class="sub" style="margin:0;font-size:13px">Stand at the warehouse and tap <b>Use my location here</b>. If someone clocks in or out further away than the <b>allowed distance</b>, the supervisor sees a warning (it doesn\'t block them). Use a bigger distance for large sites.</p>' +
       c.warehouses.map(function (w, i) {
-        return '<div class="set-row" data-wh="' + i + '"><input aria-label="Warehouse name" data-k="name" value="' + esc(w.name) + '"><input aria-label="Allowed distance in metres" data-k="radius" type="number" min="50" step="50" value="' + esc(w.radius || 300) + '" title="Allowed distance (m)">' +
+        return '<div class="set-row" data-wh="' + i + '"><label class="mini-field">Warehouse<input aria-label="Warehouse name" data-k="name" value="' + esc(w.name) + '"></label>' +
+          '<label class="mini-field">Allowed distance (metres)<input aria-label="Allowed distance in metres" data-k="radius" type="number" min="50" step="50" value="' + esc(w.radius || 300) + '"></label>' +
           '<button type="button" class="btn small" data-act="wh-here" data-i="' + i + '">' + (w.lat ? "📍 Set ✓" : "Use my location here") + "</button></div>";
       }).join("") + "</div>" +
       '<div class="card stack"><div class="eyebrow">Shifts</div>' + c.shifts.map(function (sh, i) {

@@ -427,3 +427,5 @@ tr.tot td { background: var(--surface-2); }
 #time-staff, .side select { font-size: 16px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); max-width: 100%; }
 @media (max-width: 420px) { .wh-grid { grid-template-columns: 1fr 1fr; } }
 .wh-btn.sel { border-color: var(--good); background: var(--good-bg); box-shadow: 0 0 0 2px var(--good) inset; }
+.mini-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); flex: 1 1 140px; min-width: 0; }
+.mini-field input { width: 100%; }
