@@ -1831,7 +1831,7 @@
     var ot = {};
     for (var k in d.ot) ot[k] = s.ot && s.ot[k] !== undefined && s.ot[k] !== "" ? Number(s.ot[k]) : d.ot[k];
     return { warehouses: s.warehouses && s.warehouses.length ? s.warehouses : d.warehouses, shifts: s.shifts && s.shifts.length ? s.shifts : d.shifts,
-      ot: ot, holidays: s.holidays || [] };
+      ot: ot, holidays: s.holidays || [], mapsKey: s.mapsKey || C.mapsKey || "" };
   }
   function hm(min) {
     min = Math.max(0, Math.round(min || 0));
@@ -2429,6 +2429,9 @@
         return '<div class="spread"><span><b>' + esc(fmtDate(x.date)) + "</b> · " + esc(x.name) + '</span><button type="button" class="link" data-act="hol-del" data-d="' + esc(x.date) + '">Remove</button></div>';
       }).join("") : '<span class="sub" style="margin:0">None yet</span>') +
       '<div class="set-row"><input id="hol-date" type="date" aria-label="Holiday date"><input id="hol-name" placeholder="e.g. National Day" aria-label="Holiday name"><button type="button" class="btn small" data-act="hol-add">Add</button></div></div>' +
+      '<div class="card stack"><div class="eyebrow">Google Maps</div><div class="field"><label for="maps-key">Google Maps key</label>' +
+      '<input id="maps-key" data-notr autocomplete="off" spellcheck="false" placeholder="AIza…" value="' + esc(c.mapsKey || "") + '"></div>' +
+      '<p class="sub" style="margin:0;font-size:12.5px">Paste the key from Google Cloud (Keys &amp; Credentials). With a key, the Live map uses Google Maps and shows place names. Without one, it uses the free map.</p></div>' +
       '<div class="sticky-actions"><a class="btn" href="#/users">Back</a><button class="btn primary" type="submit">Save settings</button></div></form>';
     return h;
   }
@@ -2449,6 +2452,8 @@
       sh.end = row.querySelector('[data-k="end"]').value || sh.end;
     });
     f.querySelectorAll("[data-ot]").forEach(function (i) { c.ot[i.getAttribute("data-ot")] = Number(i.value); });
+    var mk = document.getElementById("maps-key");
+    if (mk) c.mapsKey = mk.value.trim();
     return c;
   }
   function saveSettingsNow(c, msg) {
@@ -2806,7 +2811,8 @@
   function viewMap(date) {
     date = date || today();
     mapState.date = date;
-    return '<div class="card flush"><div id="map" class="map" data-notr></div></div>' +
+    var hint = !tcfg().mapsKey && isAdmin() ? '<p class="sub" style="font-size:13px;margin:0 0 10px">Want Google Maps? Add your Google Maps key in <a href="#/settings">Company settings</a>.</p>' : "";
+    return hint + '<div class="card flush map-wrap"><div id="map" class="map" data-notr></div></div>' +
       '<div class="spread" style="margin:14px 0 8px"><h2 style="margin:0">People on the map</h2>' +
       '<input type="date" class="mini-date" data-mapdate="1" aria-label="Route date" value="' + esc(date) + '" max="' + esc(today()) + '"></div>' +
       '<div class="card flush list" id="map-list"></div>' +
@@ -2832,8 +2838,58 @@
   }
 
   function openMap() {
+    var key = tcfg().mapsKey;
+    if (key && !mapState.gmFailed) openGoogle(key); else openLeaflet();
+  }
+
+  /** Google Maps (when the admin saved a key in Company settings). Falls back to the free map if Google refuses the key. */
+  function loadGoogle(key) {
+    if (window.google && google.maps && google.maps.Map) return Promise.resolve();
+    if (loadGoogle.p) return loadGoogle.p;
+    loadGoogle.p = new Promise(function (res, rej) {
+      window.__ezGmReady = function () { res(); };
+      window.gm_authFailure = function () {
+        mapState.gmFailed = true;
+        toast("Google refused the Maps key. Check it in Company settings. Showing the free map.", 8000);
+        if (mapState.engine === "google" && document.getElementById("map")) { closeMap(); route(); }
+      };
+      var sc = document.createElement("script");
+      sc.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&language=" + (curLang() === "ar" ? "ar" : "en") +
+        "&region=KW&loading=async&callback=__ezGmReady";
+      sc.async = true;
+      sc.onerror = function () { loadGoogle.p = null; rej(new Error("Google Maps couldn't load. Check the connection.")); };
+      document.head.appendChild(sc);
+    });
+    return loadGoogle.p;
+  }
+
+  function openGoogle(key) {
     var el = document.getElementById("map");
     mapState.map = "loading";
+    loadGoogle(key).then(function () {
+      if (mapState.gmFailed) return;
+      if (!document.getElementById("map") || document.getElementById("map") !== el) return;
+      var m = new google.maps.Map(el, {
+        center: { lat: 29.2, lng: 48.0 }, zoom: 10, streetViewControl: false, fullscreenControl: true, clickableIcons: false,
+        mapTypeControl: true, mapTypeControlOptions: { mapTypeIds: ["roadmap", "hybrid"] }
+      });
+      mapState.map = m;
+      mapState.engine = "google";
+      mapState.gobjs = [];
+      mapState.fitted = false;
+      if (mapState.sel) watchSelRoute();
+      drawMap();
+    }).catch(function () {
+      mapState.gmFailed = true;
+      mapState.map = null;
+      openLeaflet();
+    });
+  }
+
+  function openLeaflet() {
+    var el = document.getElementById("map");
+    mapState.map = "loading";
+    mapState.engine = "leaflet";
     loadLeaflet().then(function () {
       if (!document.getElementById("map") || document.getElementById("map") !== el) return;
       var m = L.map(el, { zoomControl: true, attributionControl: true });
@@ -2868,6 +2924,8 @@
   function closeMap() {
     if (mapState.unRoute) { mapState.unRoute(); mapState.unRoute = null; }
     if (mapState.map && mapState.map.remove) { try { mapState.map.remove(); } catch (e) {} }
+    (mapState.gobjs || []).forEach(function (o) { o.setMap(null); });
+    mapState.gobjs = [];
     mapState.map = null;
     mapState.layers = null;
   }
@@ -2904,19 +2962,132 @@
     }).sort(function (a, b) { return (b.open ? 1 : 0) - (a.open ? 1 : 0) || a.name.localeCompare(b.name); });
   }
 
+  /** "2.3 km from Shuaiba" / "At Shuaiba": works without Google. */
+  function nearWarehouse(lat, lng) {
+    var best = null;
+    tcfg().warehouses.forEach(function (w) {
+      if (!w.lat) return;
+      var d = distM({ lat: lat, lng: lng }, w);
+      if (!best || d < best.d) best = { w: w, d: d };
+    });
+    if (!best) return "";
+    if (best.d <= (Number(best.w.radius) || 300)) return "At " + best.w.name;
+    return (best.d >= 1000 ? (best.d / 1000).toFixed(1) + " km" : best.d + " m") + " from " + best.w.name;
+  }
+
+  // place names from Google, only for the person you tap (keeps within Google's free allowance)
+  var placeCache = {};
+  try { placeCache = JSON.parse(localStorage.getItem("ezstaff-places") || "{}"); } catch (e) {}
+  function placeName(lat, lng) {
+    var k = lat.toFixed(3) + "," + lng.toFixed(3) + "," + curLang();
+    if (placeCache[k] !== undefined) return placeCache[k];
+    if (mapState.engine !== "google" || !(window.google && google.maps && google.maps.Geocoder)) return "";
+    placeCache[k] = "";
+    new google.maps.Geocoder().geocode({ location: { lat: lat, lng: lng } }, function (res, status) {
+      if (status !== "OK" || !res || !res.length) return;
+      var want = ["route", "neighborhood", "sublocality_level_1", "sublocality", "locality"], parts = [];
+      want.forEach(function (t) {
+        res.forEach(function (r) {
+          r.address_components.forEach(function (c) {
+            if (c.types.indexOf(t) >= 0 && parts.indexOf(c.long_name) < 0 && parts.length < 3 && !/^\+|Unnamed/.test(c.long_name)) parts.push(c.long_name);
+          });
+        });
+      });
+      placeCache[k] = parts.join(", ") || res[0].formatted_address.replace(/,?\s*(Kuwait|الكويت)$/, "");
+      try {
+        var keys = Object.keys(placeCache);
+        if (keys.length > 300) keys.slice(0, keys.length - 300).forEach(function (x) { delete placeCache[x]; });
+        localStorage.setItem("ezstaff-places", JSON.stringify(placeCache));
+      } catch (e) {}
+      drawMap();
+    });
+    return "";
+  }
+
   function drawMap() {
     var list = document.getElementById("map-list");
     var people = mapPeople(), isToday = (mapState.date || today()) === today();
     if (list) {
       list.innerHTML = people.length ? people.map(function (p) {
+        var l = p.live, where = isToday && p.open && l && l.date === today() ? nearWarehouse(l.lat, l.lng) : "";
         return '<button class="item map-row' + (mapState.sel === p.uid ? " sel" : "") + '" data-act="map-sel" data-uid="' + esc(p.uid) + '">' +
           '<span class="dot ' + (p.fresh ? "on" : p.open ? "warn" : "") + '"></span><span class="grow"><b>' + esc(p.name) + "</b>" +
-          (p.status ? '<span class="sub">' + esc(p.status) + "</span>" : "") + "</span>" +
+          (p.status ? '<span class="sub">' + esc(p.status) + "</span>" : "") + (where ? '<span class="sub">' + esc(where) + "</span>" : "") + "</span>" +
           '<span class="link">' + (mapState.sel === p.uid ? "Showing route" : "Route") + "</span></button>";
       }).join("") : '<div class="empty" style="padding:20px">Nobody has live location yet. Tick <b>Live location on duty</b> for drivers on the People page.</div>';
     }
     var m = mapState.map;
-    if (!m || !m.addLayer) return;
+    var r = mapState.route && mapState.route.points ? mapState.route.points.slice().sort(function (a, b) { return a.t - b.t; }) : [];
+    if (m && mapState.engine === "google" && m.fitBounds) drawGoogle(m, people, isToday, r);
+    else if (m && m.addLayer) drawLeaflet(m, people, isToday, r);
+    else return;
+    var info = document.getElementById("map-info");
+    if (info) info.remove();
+    if (mapState.sel) {
+      var who = people.filter(function (p) { return p.uid === mapState.sel; })[0];
+      var km = 0;
+      for (var i = 1; i < r.length; i++) km += distM(r[i - 1], r[i]);
+      var last = who && isToday && who.live && who.live.date === today() ? who.live : (r.length ? r[r.length - 1] : null);
+      var name = last ? placeName(last.lat, last.lng) : "";
+      var div = document.createElement("div");
+      div.id = "map-info";
+      div.className = "map-info";
+      div.innerHTML = "<b>" + esc(who ? who.name : "") + "</b> · " + esc(fmtDate(mapState.date || today())) + "<br>" +
+        (r.length ? plural(r.length, "point") + " · " + hhmm(r[0].t) + "–" + hhmm(r[r.length - 1].t) + " · about " + (km / 1000).toFixed(1) + " km" : "No route for this day") +
+        (last ? "<br><span>" + esc(name || nearWarehouse(last.lat, last.lng)) + '</span> · <a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' +
+          last.lat + "," + last.lng + '">Open in Google Maps</a>' : "");
+      var wrap = document.querySelector(".map-wrap");
+      if (wrap) wrap.appendChild(div);
+    }
+  }
+
+  function drawGoogle(m, people, isToday, r) {
+    (mapState.gobjs || []).forEach(function (o) { o.setMap(null); });
+    var objs = mapState.gobjs = [], b = new google.maps.LatLngBounds(), n = 0;
+    tcfg().warehouses.forEach(function (w) {
+      if (!w.lat) return;
+      objs.push(new google.maps.Circle({ map: m, center: { lat: w.lat, lng: w.lng }, radius: Number(w.radius) || 300, strokeColor: "#6b7280", strokeWeight: 1, fillColor: "#6b7280", fillOpacity: 0.08, clickable: false }));
+      objs.push(new google.maps.Marker({ map: m, position: { lat: w.lat, lng: w.lng }, clickable: false,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 0 }, label: { text: w.name, fontSize: "11px", fontWeight: "700", color: "#374151" } }));
+      b.extend({ lat: w.lat, lng: w.lng }); n++;
+    });
+    if (isToday) {
+      people.forEach(function (p) {
+        var l = p.live;
+        if (!l || l.date !== today() || !p.open) return;
+        var mk = new google.maps.Marker({ map: m, position: { lat: l.lat, lng: l.lng }, title: p.name, zIndex: mapState.sel === p.uid ? 10 : 5,
+          label: { text: initials(p.name), color: "#ffffff", fontSize: "12px", fontWeight: "700" },
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 15, fillColor: mapState.sel === p.uid ? "#111827" : p.fresh ? "#c8102e" : "#9ca3af", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } });
+        mk.addListener("click", function () { selectOnMap(p.uid); });
+        objs.push(mk);
+        b.extend({ lat: l.lat, lng: l.lng }); n++;
+      });
+    }
+    if (mapState.sel && r.length) {
+      var path = r.map(function (x) { return { lat: x.lat, lng: x.lng }; });
+      objs.push(new google.maps.Polyline({ map: m, path: path, strokeColor: "#c8102e", strokeWeight: 4, strokeOpacity: 0.85 }));
+      objs.push(new google.maps.Marker({ map: m, position: path[0], title: "Start " + hhmm(r[0].t),
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#15803d", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 } }));
+      objs.push(new google.maps.Marker({ map: m, position: path[path.length - 1], title: "Last " + hhmm(r[r.length - 1].t),
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: "#ffffff", fillOpacity: 1, strokeColor: "#c8102e", strokeWeight: 3 } }));
+      if (mapState.fitRoute) {
+        var rb = new google.maps.LatLngBounds();
+        path.forEach(function (x) { rb.extend(x); });
+        fitGoogle(m, rb);
+        mapState.fitRoute = false;
+        mapState.fitted = true;
+      }
+    } else if (!mapState.fitted && n) {
+      fitGoogle(m, b);
+      mapState.fitted = true;
+    }
+  }
+  function fitGoogle(m, b) {
+    m.fitBounds(b, 40);
+    google.maps.event.addListenerOnce(m, "idle", function () { if (m.getZoom() > 16) m.setZoom(16); });
+  }
+
+  function drawLeaflet(m, people, isToday, r) {
     mapState.layers.clearLayers();
     var pts = [];
     tcfg().warehouses.forEach(function (w) {
@@ -2937,7 +3108,6 @@
         pts.push(ll);
       });
     }
-    var r = mapState.route && mapState.route.points ? mapState.route.points.slice().sort(function (a, b) { return a.t - b.t; }) : [];
     if (mapState.sel && r.length) {
       var line = r.map(function (x) { return [x.lat, x.lng]; });
       L.polyline(line, { color: "#c8102e", weight: 4, opacity: 0.8 }).addTo(mapState.layers);
@@ -2948,19 +3118,6 @@
     } else if (!mapState.fitted && pts.length) {
       m.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 15 });
       mapState.fitted = true;
-    }
-    var info = document.getElementById("map-info");
-    if (info) info.remove();
-    if (mapState.sel) {
-      var who = people.filter(function (p) { return p.uid === mapState.sel; })[0];
-      var km = 0;
-      for (var i = 1; i < r.length; i++) km += distM(r[i - 1], r[i]);
-      var div = document.createElement("div");
-      div.id = "map-info";
-      div.className = "map-info";
-      div.innerHTML = "<b>" + esc(who ? who.name : "") + "</b> · " + esc(fmtDate(mapState.date || today())) + "<br>" +
-        (r.length ? plural(r.length, "point") + " · " + hhmm(r[0].t) + "–" + hhmm(r[r.length - 1].t) + " · about " + (km / 1000).toFixed(1) + " km" : "No route for this day");
-      document.getElementById("map").appendChild(div);
     }
   }
 

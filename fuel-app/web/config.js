@@ -14,6 +14,10 @@ window.EZ_CONFIG = {
     appId: "1:996581712381:web:3d530d3d26d2b04c80f994"
   },
 
+  // Google Maps for the Live map. Restricted in Google Cloud to arunratnam.github.io and the Android app, so it can be public.
+  // The admin can replace it in Company settings.
+  mapsKey: "AIzaSyAhttQVTyZn6-jDKTcUkfYNS-9nbWuh3dE",
+
   companyName: "EZ Storage",
   formTitle: "Fuel Expense Submission Form",
   docNo: "EZ-OPS-FUEL-002",

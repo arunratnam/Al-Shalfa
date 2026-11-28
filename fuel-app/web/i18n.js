@@ -234,7 +234,11 @@
     "Person": "الشخص", "Staff member": "الموظف", "All staff": "كل الموظفين", "hours": "ساعات", "days": "أيام",
     "Overtime = hours worked in a day beyond the normal hours, wherever the person worked. On the rest day and public holidays every hour worked is overtime. Hourly wage = salary ÷ days per month ÷ hours per day.":
       "العمل الإضافي = ساعات العمل في اليوم بعد الساعات العادية، أينما عمل الشخص. في يوم الراحة والعطل الرسمية كل ساعة عمل تعتبر إضافية. أجر الساعة = الراتب ÷ أيام الشهر ÷ ساعات اليوم.",
-    "without a salary. Tap": "بدون راتب. اضغط", "person": "شخص", "people without a salary. Tap": "أشخاص بدون راتب. اضغط"
+    "without a salary. Tap": "بدون راتب. اضغط", "Open in Google Maps": "فتح في خرائط Google", "Google Maps": "خرائط Google",
+    "Google Maps key": "مفتاح خرائط Google", "Want Google Maps? Add your Google Maps key in": "تريد خرائط Google؟ أضف مفتاح خرائط Google في",
+    "Google refused the Maps key. Check it in Company settings. Showing the free map.": "رفضت Google مفتاح الخرائط. تحقق منه في إعدادات الشركة. يتم عرض الخريطة المجانية.",
+    "Paste the key from Google Cloud (Keys & Credentials). With a key, the Live map uses Google Maps and shows place names. Without one, it uses the free map.":
+      "الصق المفتاح من Google Cloud (المفاتيح وبيانات الاعتماد). مع المفتاح تستخدم الخريطة المباشرة خرائط Google وتعرض أسماء الأماكن. بدونه تُستخدم الخريطة المجانية.", "person": "شخص", "people without a salary. Tap": "أشخاص بدون راتب. اضغط"
   };
 
   // words replaced inside otherwise-translated text (dates, units)
@@ -254,7 +258,8 @@
     [/^OT ×([\d.]+), Friday ×([\d.]+), holiday ×([\d.]+)$/, "الإضافي ×$1، الجمعة ×$2، العطلة ×$3"],
     [/^(\d+) min ago$/, "قبل $1 دقيقة"],
     [/^(\d+(?:\.\d+)?) km from (.+)$/, "$1 كم من $2"],
-    [/^(\d+) m from (.+)$/, "$1 م من $2"]
+    [/^(\d+) m from (.+)$/, "$1 م من $2"],
+    [/^At (.+)$/, "في $1"]
   ];
   var KEYS = Object.keys(AR).sort(function (a, b) { return b.length - a.length; });
   var WORD_RE = new RegExp("\\b(" + Object.keys(WORDS).join("|") + ")\\b", "g");
@@ -280,7 +285,10 @@
       var parts = t.split(" · ").map(function (p) { var f = full(p); return f === null ? (isData(p) ? p : null) : f; });
       return parts.indexOf(null) >= 0 ? null : parts.join(" · ");
     }
-    for (var j = 0; j < PATTERNS.length; j++) if (PATTERNS[j][0].test(t)) return t.replace(PATTERNS[j][0], PATTERNS[j][1]);
+    for (var j = 0; j < PATTERNS.length; j++) {
+      var mm = t.match(PATTERNS[j][0]);
+      if (mm) return PATTERNS[j][1].replace(/\$(\d)/g, function (_, n) { var g = mm[n] || "", f = full(g); return f === null ? g : f; });
+    }
     for (var i = 0; i < KEYS.length; i++) {
       var k = KEYS[i];
       if (k.length < 2 || t.length <= k.length) continue;

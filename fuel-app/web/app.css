@@ -459,3 +459,5 @@ tr.tot td { background: var(--surface-2); }
 html[lang="ar"] body { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", "Noto Naskh Arabic", system-ui, sans-serif; }
 html[dir="rtl"] .map, html[dir="rtl"] .sig-img, html[dir="rtl"] canvas { direction: ltr; }
 html[dir="rtl"] .link[style*="text-align:left"] { text-align: right !important; }
+.map-wrap { position: relative; }
+.map-info a { color: var(--brand); font-weight: 600; }

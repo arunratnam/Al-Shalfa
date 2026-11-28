@@ -85,6 +85,14 @@ Ask for them before building an Android update; without the same key, phones mus
 - Rules: only tracked, active people write their own `live`/`route`; office reads. iPhone/PC can't track in the background.
 - `TrackSender` has no Android dependencies: test it on the JVM with the android-all jar against the emulator.
 
+## Google Maps (3.0)
+
+- Live map uses Google Maps JS API when a key is set: `settings/company.mapsKey` (Company settings) or `mapsKey` in
+  `config.js` (restricted in Google Cloud to `arunratnam.github.io/*` and `appassets.androidplatform.net/*`; Maps JavaScript
+  API + Geocoding API; project ezfuel-20933, free trial started 28 Nov 2026 – the owner must "Activate full account" after 90 days).
+- Falls back to the free Leaflet map if Google refuses the key (`gm_authFailure`). Place names come from the Geocoder only for the
+  selected person (cached), to stay within the free allowance; every row shows the distance to the nearest warehouse.
+
 ## Arabic (2.8)
 
 - `web/i18n.js` translates the screens as they are drawn (MutationObserver), with `dir="rtl"`. Dictionary `AR`
@@ -95,5 +103,5 @@ Ask for them before building an Android update; without the same key, phones mus
 
 ## Versions so far
 
-EZ Staff 2.9 (map in English/Arabic/satellite, Arabic, live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+EZ Staff 3.0 (Google Maps live map with place names, map in English/Arabic/satellite, Arabic, live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
 `com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).
