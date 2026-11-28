@@ -1,6 +1,6 @@
-Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Djavax.net.ssl.trustStoreType=JKS -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=35667 -Dhttp.nonProxyHosts=localhost|127.0.0.1|::1|127.*|0.*|::|169.254.*|api.anthropic.com|api-staging.anthropic.com|api-pr-preview.anthropic.com|mcp-proxy.anthropic.com|mcp-proxy-staging.anthropic.com|registry.npmjs.org|jsr.io|npm.jsr.io|pypi.org|files.pythonhosted.org|index.crates.io|proxy.golang.org|host.docker.internal|10.*|172.16.*|172.17.*|172.18.*|172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|172.29.*|172.30.*|172.31.*|192.168.*|100.64.0.0/10|*.svc.cluster.local|*.svc.cluster.local -Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes=
+Picked up JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts -Djavax.net.ssl.trustStoreType=JKS -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=34141 -Dhttp.nonProxyHosts=localhost|127.0.0.1|::1|127.*|0.*|::|169.254.*|api.anthropic.com|api-staging.anthropic.com|api-pr-preview.anthropic.com|mcp-proxy.anthropic.com|mcp-proxy-staging.anthropic.com|registry.npmjs.org|jsr.io|npm.jsr.io|pypi.org|files.pythonhosted.org|index.crates.io|proxy.golang.org|host.docker.internal|10.*|172.16.*|172.17.*|172.18.*|172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|172.29.*|172.30.*|172.31.*|192.168.*|100.64.0.0/10|*.svc.cluster.local|*.svc.cluster.local -Djdk.http.auth.tunneling.disabledSchemes= -Djdk.http.auth.proxying.disabledSchemes=
 Picked up _JAVA_OPTIONS: -XX:+UnlockDiagnosticVMOptions -XX:DisableIntrinsic=_base64_encodeBlock,_base64_decodeBlock
-Nov 28, 2026 10:42:34 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
+Nov 28, 2026 11:09:32 AM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
 INFO: Started WebSocket server on ws://127.0.0.1:9150
 API endpoint: http://127.0.0.1:8080
 If you are using a library that supports the FIRESTORE_EMULATOR_HOST environment variable, run:
@@ -14,157 +14,159 @@ If you are running a Firestore in Datastore Mode project, run:
 Note: Support for Datastore Mode is in preview. If you encounter any bugs please file at https://github.com/firebase/firebase-tools/issues.
 Dev App Server is now running.
 
-Nov 28, 2026 10:42:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:41 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:42 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:42 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:42 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:42 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:42 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:43 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:44 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:45 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:46 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:47 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:48 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:52 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:49 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:52 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:50 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:54 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:51 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:54 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:52 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:52 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:52 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected non-HTTP/2 connection.
+Nov 28, 2026 11:09:52 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L107
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -194,17 +196,17 @@ evaluation error at L107:24 for 'create' @ L107, false for 'create' @ L107
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:52 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 false for 'create' @ L107
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -234,17 +236,17 @@ false for 'create' @ L107
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 false for 'create' @ L121, evaluation error at L124:24 for 'update' @ L124, false for 'create' @ L121
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -274,21 +276,21 @@ false for 'create' @ L121, evaluation error at L124:24 for 'update' @ L124, fals
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 evaluation error at L81:23 for 'create' @ L81, evaluation error at L81:23 for 'update' @ L81, false for 'update' @ L81
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -318,17 +320,17 @@ evaluation error at L81:23 for 'create' @ L81, evaluation error at L81:23 for 'u
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 evaluation error at L111:24 for 'update' @ L111, false for 'update' @ L111
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -358,33 +360,33 @@ evaluation error at L111:24 for 'update' @ L111, false for 'update' @ L111
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:53 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:56 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:56 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:53 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:55 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:58 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:56 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:58 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:56 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:57 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 evaluation error at L87:23 for 'create' @ L87, evaluation error at L87:23 for 'update' @ L87, false for 'create' @ L87
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -414,17 +416,17 @@ evaluation error at L87:23 for 'create' @ L87, evaluation error at L87:23 for 'u
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:57 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
+Nov 28, 2026 11:09:57 AM com.google.cloud.datastore.emulator.impl.util.WrappedStreamObserver onError
 WARNING: Operation failed: 
 false for 'create' @ L107
 com.google.cloud.datastore.core.exception.DatastoreException: 
@@ -454,21 +456,21 @@ false for 'create' @ L107
 	at com.google.net.webchannel.server.v8.ChannelInternalImpl.consume(ChannelInternalImpl.java:91)
 	at com.google.net.webchannel.server.common.ChannelProcessor.run(ChannelProcessor.java:86)
 
-Nov 28, 2026 10:42:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:42:59 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
+Nov 28, 2026 11:09:57 AM com.google.cloud.datastore.emulator.firestore.webchannel.FirestoreV1WebChannelAdapter$FirestoreWriteHandler onClose
 INFO: channel closed
-Nov 28, 2026 10:43:00 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:43:00 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:43:00 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:57 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:43:00 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:58 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:43:01 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:09:59 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
-Nov 28, 2026 10:43:03 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+Nov 28, 2026 11:10:00 AM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
 INFO: Detected non-HTTP/2 connection.
 *** shutting down gRPC server since JVM is shutting down
 *** server shut down

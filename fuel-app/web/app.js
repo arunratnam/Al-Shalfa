@@ -2259,14 +2259,60 @@
       '<div class="kpis">' + kpi("Salaries", kd(tot.salary), "KD", plural(rows.length, "person").replace("persons", "people")) + kpi("Overtime", kd(tot.ot), "KD", "approved only") +
       kpi("Total to pay", kd(tot.total), "KD", "", true) + kpi("OT waiting", hm(pend), "", "not included yet", pend > 0) + "</div>";
     if (noSalary && isAdmin()) h += '<div class="banner warn" style="margin-top:12px">' + plural(noSalary, "person").replace("persons", "people") + " without a salary. Tap <b>Set salary</b> in the table.</div>";
-    h += '<div class="btn-row" style="margin:14px 0"><button class="btn" data-act="pay-pdf" data-m="' + m + '">' + ICON.pdf + 'Payroll PDF</button><button class="btn" data-act="pay-csv" data-m="' + m + '">' + ICON.pdf + "Excel (CSV)</button></div>";
+    h += '<div class="btn-row" style="margin:14px 0"><button class="btn primary" data-act="pay-share" data-m="' + m + '">' + (canShare() ? ICON.whatsapp + "Share on WhatsApp" : ICON.share + "Share PDF") + "</button>" +
+      '<button class="btn" data-act="pay-pdf" data-m="' + m + '">' + ICON.pdf + 'Payroll PDF</button><button class="btn" data-act="pay-csv" data-m="' + m + '">' + ICON.pdf + "Excel (CSV)</button></div>" +
+      '<p class="sub" style="font-size:12.5px;margin:-6px 0 10px">Tap a name to see that person\'s month and payslip.</p>';
     h += '<div class="card flush table-wrap"><table><thead><tr><th>Staff</th><th>Shift</th><th class="r">Salary KD</th><th class="r">Hourly KD</th><th class="r">OT h</th><th class="r">Friday h</th><th class="r">Holiday h</th><th class="r">OT KD</th><th class="r">Total KD</th><th></th></tr></thead><tbody>' +
       rows.map(function (r) {
-        return "<tr><td><b>" + esc(r.name) + "</b>" + (r.pending ? '<br><span class="warnline">' + hm(r.pending) + " OT waiting</span>" : "") + "</td><td>" + esc(r.shift) + '</td><td class="r">' + (r.salary ? kd(r.salary) : "—") + '</td><td class="r">' + (r.salary ? r.hourly.toFixed(3) : "—") +
+        return '<tr><td><a href="#/payroll/' + m + "/" + esc(r.uid) + '"><b>' + esc(r.name) + "</b></a>" + (r.pending ? '<br><span class="warnline">' + hm(r.pending) + " OT waiting</span>" : "") + "</td><td>" + esc(r.shift) + '</td><td class="r">' + (r.salary ? kd(r.salary) : "—") + '</td><td class="r">' + (r.salary ? r.hourly.toFixed(3) : "—") +
           '</td><td class="r">' + hours(r.mins.normal) + '</td><td class="r">' + hours(r.mins.rest) + '</td><td class="r">' + hours(r.mins.holiday) + '</td><td class="r">' + kd(r.otAmount) + '</td><td class="r"><b>' + kd(r.total) + "</b></td><td>" +
           (isAdmin() ? '<button class="btn small" data-act="pay-set" data-uid="' + esc(r.uid) + '">Set salary</button>' : "") + "</td></tr>";
       }).join("") + '<tr class="tot"><td><b>Total</b></td><td></td><td class="r"><b>' + kd(tot.salary) + '</b></td><td></td><td class="r">' + hours(sum(rows, function (r) { return r.mins.normal; })) + '</td><td class="r">' + hours(sum(rows, function (r) { return r.mins.rest; })) +
       '</td><td class="r">' + hours(sum(rows, function (r) { return r.mins.holiday; })) + '</td><td class="r"><b>' + kd(tot.ot) + '</b></td><td class="r"><b>' + kd(tot.total) + "</b></td><td></td></tr></tbody></table></div>";
+    return h;
+  }
+
+  /** One person's month: salary, every overtime day with its rate and amount, and the total. */
+  function payslipData(m, uid) {
+    var c = tcfg().ot, u = userById(uid), row = payrollRows(m).filter(function (r) { return r.uid === uid; })[0];
+    if (!row) {
+      var pay = st.pay[uid] || {}, sal = Number(pay.salary) || 0;
+      row = { uid: uid, name: u.name, employeeId: u.employeeId || "", shift: shiftOf(u).name, salary: sal, hourly: sal / c.daysPerMonth / c.hoursPerDay,
+        mins: { normal: 0, rest: 0, holiday: 0 }, pending: 0, otAmount: 0, total: sal };
+    }
+    var rate = { normal: c.normal, rest: c.rest, holiday: c.holiday };
+    var days = st.allOt.filter(function (o) { return o.ownerUid === uid && monthOf(o.date) === m; }).sort(function (a, b) { return a.date.localeCompare(b.date); })
+      .map(function (o) {
+        var t = o.dayType || "normal", ok = o.status === "approved", mins = ok ? o.approvedMin || 0 : 0;
+        return { date: o.date, type: t, typeLabel: t === "normal" ? "Normal" : holidayName(o.date) || DAY_LABEL[t], worked: o.workedMin || 0, asked: o.otMin || 0,
+          approved: mins, status: o.status, rate: rate[t], amount: Math.round(mins / 60 * row.hourly * rate[t] * 1000) / 1000, by: o.decidedBy || "" };
+      });
+    var att = st.allAtt.filter(function (e) { return e.ownerUid === uid && monthOf(e.date) === m; });
+    var workedDays = {};
+    att.forEach(function (e) { workedDays[e.date] = 1; });
+    var workedMin = sum(att, function (e) { return e.outAt ? (e.outAt - e.inAt) / 60000 : 0; });
+    return { month: m, label: monthLabel(m), row: row, user: u, days: days, daysWorked: Object.keys(workedDays).length, workedMin: workedMin, ot: c, by: st.user.name };
+  }
+
+  function viewPayslip(m, uid) {
+    if (!isAdmin()) return '<div class="card empty"><b>Admin only</b>Salaries and payroll are handled by the admin.</div>';
+    var d = payslipData(m, uid), r = d.row, u = d.user;
+    var h = '<a class="link" href="#/payroll/' + m + '">← All staff</a><div class="spread" style="margin-top:6px"><h1>' + esc(r.name) + "</h1>" +
+      '<span class="status info">' + esc(monthLabel(m)) + "</span></div>" +
+      '<p class="sub">' + esc(u.employeeId || "No employee ID") + " · " + esc(u.department || "") + " · " + esc(shiftLabel(shiftOf(u))) + "</p>" +
+      '<div class="btn-row" style="margin-bottom:14px"><button class="btn primary" data-act="slip-share" data-m="' + m + '" data-uid="' + esc(uid) + '">' + (canShare() ? ICON.whatsapp + "Share payslip on WhatsApp" : ICON.share + "Share payslip") + "</button>" +
+      '<button class="btn" data-act="slip-pdf" data-m="' + m + '" data-uid="' + esc(uid) + '">' + ICON.pdf + 'Payslip PDF</button><button class="btn" data-act="pay-set" data-uid="' + esc(uid) + '">Set salary</button></div>' +
+      '<div class="kpis">' + kpi("Basic salary", r.salary ? kd(r.salary) : "—", r.salary ? "KD" : "", r.salary ? r.hourly.toFixed(3) + " KD per hour" : "Set the salary first") +
+      kpi("Overtime", kd(r.otAmount), "KD", hm(r.mins.normal + r.mins.rest + r.mins.holiday) + " approved") +
+      kpi("Total to pay", kd(r.total), "KD", "", true) + kpi("Days worked", d.daysWorked, "", hm(d.workedMin) + " in total") + "</div>";
+    if (r.pending) h += '<div class="banner warn" style="margin-top:12px">' + hm(r.pending) + ' of overtime is still waiting for approval and isn\'t included. <a href="#/time/ot">Approve overtime</a></div>';
+    h += '<div class="section-title"><h2>Overtime days</h2></div>';
+    if (!d.days.length) return h + '<div class="card empty"><b>No overtime this month</b></div>';
+    h += '<div class="card flush table-wrap"><table><thead><tr><th>Date</th><th>Day</th><th class="r">Worked</th><th class="r">OT asked</th><th class="r">OT approved</th><th class="r">Rate</th><th class="r">Amount KD</th><th>Status</th></tr></thead><tbody>' +
+      d.days.map(function (x) {
+        return "<tr><td>" + esc(fmtDate(x.date)) + "</td><td>" + esc(x.typeLabel) + '</td><td class="r">' + hm(x.worked) + '</td><td class="r">' + hm(x.asked) + '</td><td class="r">' + (x.status === "approved" ? hm(x.approved) : "—") +
+          '</td><td class="r">×' + x.rate + '</td><td class="r">' + (x.status === "approved" ? kd(x.amount) : "—") + "</td><td>" + otChip({ status: x.status, approvedMin: x.approved, otMin: x.asked }) + "</td></tr>";
+      }).join("") + '<tr class="tot"><td><b>Total</b></td><td></td><td></td><td></td><td class="r"><b>' + hm(r.mins.normal + r.mins.rest + r.mins.holiday) + '</b></td><td></td><td class="r"><b>' + kd(r.otAmount) + "</b></td><td></td></tr></tbody></table></div>";
     return h;
   }
 
@@ -2379,7 +2425,7 @@
       case "mine": html = viewHomeLocal(); break;
       case "time": html = isOffice() ? viewTimeOffice(id, parts[2]) : viewMyTime(id); break;
       case "my-time": html = viewMyTime(id); break;
-      case "payroll": html = viewPayroll(id); break;
+      case "payroll": html = parts[2] ? viewPayslip(id, parts[2]) : viewPayroll(id); break;
       case "settings": html = viewSettings(); break;
       case "my-claims": html = viewClaims(); break;
       case "my-reports": html = viewReports(id); break;
@@ -2467,9 +2513,20 @@
       case "pay-csv": exportPayrollCsv(el.getAttribute("data-m")); break;
       case "pay-set": salarySheet(el.getAttribute("data-uid")); break;
       case "pay-pdf":
-        var pm = el.getAttribute("data-m");
+      case "pay-share":
+        var pm = el.getAttribute("data-m"), pname = "Payroll " + monthLabel(pm) + ".pdf";
         try {
-          saveFile(P.buildPayroll({ month: pm, label: monthLabel(pm), rows: payrollRows(pm), ot: tcfg().ot, by: st.user.name }, C).output("blob"), "Payroll " + monthLabel(pm) + ".pdf");
+          var pblob = P.buildPayroll({ month: pm, label: monthLabel(pm), rows: payrollRows(pm), ot: tcfg().ot, by: st.user.name }, C).output("blob");
+          if (a === "pay-share") shareFile(pblob, pname, "Payroll " + monthLabel(pm)); else saveFile(pblob, pname);
+        } catch (x) { toast("Couldn't make the PDF: " + x.message); }
+        break;
+      case "slip-pdf":
+      case "slip-share":
+        var sm = el.getAttribute("data-m"), su = el.getAttribute("data-uid"), sd = payslipData(sm, su);
+        var sname = "Payslip " + monthLabel(sm) + " " + (sd.row.name || "").replace(/[^\w\- ]+/g, "").trim() + ".pdf";
+        try {
+          var sblob = P.buildPayslip(sd, C).output("blob");
+          if (a === "slip-share") shareFile(sblob, sname, "Payslip " + monthLabel(sm)); else saveFile(sblob, sname);
         } catch (x) { toast("Couldn't make the PDF: " + x.message); }
         break;
       case "wh-here":

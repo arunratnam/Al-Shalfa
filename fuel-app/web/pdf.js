@@ -505,5 +505,74 @@
     return doc;
   }
 
-  window.EZPdf = { build: build, buildMonthly: buildMonthly, buildPayroll: buildPayroll, date: d, kd: kd };
+  /** One person's payslip: salary, overtime days with rate and amount, total. data from payslipData(). */
+  function buildPayslip(data, cfg) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    var r = data.row, u = data.user, o = data.ot;
+    function hmm(min) { min = Math.round(min || 0); return Math.floor(min / 60) + "h " + ("0" + (min % 60)).slice(-2) + "m"; }
+    doc.setProperties({ title: "Payslip " + data.label + " " + (r.name || ""), author: cfg.companyName || "" });
+    if (window.EZ_LOGO) {
+      try { doc.addImage(window.EZ_LOGO, "PNG", 105 - 22, 9, 44, 44 * 134 / 308); } catch (e) {}
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.setTextColor(RED[0], RED[1], RED[2]);
+    doc.text("PAYSLIP – SALARY & OVERTIME", 105, 34, { align: "center" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.setFontSize(11);
+    doc.text(data.label.toUpperCase(), 105, 40, { align: "center" });
+    doc.setFont("helvetica", "normal");
+
+    var y = 48;
+    section(doc, "A. EMPLOYEE", y);
+    y += 2;
+    pairRow(doc, y, 8, [["Name", r.name, 34, 62], ["Employee ID", u.employeeId || "", 34, 52]]);
+    y += 8;
+    pairRow(doc, y, 8, [["Department", u.department || "", 34, 62], ["Shift", r.shift, 34, 52]]);
+    y += 8;
+    pairRow(doc, y, 8, [["Days Worked", String(data.daysWorked), 34, 62], ["Hours Worked", hmm(data.workedMin), 34, 52]]);
+    y += 8;
+
+    y += 7;
+    section(doc, "B. PAY", y);
+    y += 2;
+    pairRow(doc, y, 8, [["Basic Salary", kd(r.salary) + " KD", 42, 54], ["Hourly Wage", r.hourly.toFixed(3) + " KD", 42, 44]]);
+    y += 8;
+    pairRow(doc, y, 8, [["Overtime Hours", hmm(r.mins.normal + r.mins.rest + r.mins.holiday), 42, 54], ["Overtime Amount", kd(r.otAmount) + " KD", 42, 44]]);
+    y += 8;
+    pairRow(doc, y, 9, [["TOTAL TO PAY", kd(r.total) + " KD", 42, 54], ["", "", 42, 44]]);
+    y += 9;
+    doc.setFontSize(8);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text("Hourly wage = basic salary ÷ " + o.daysPerMonth + " ÷ " + o.hoursPerDay + "   ·   Overtime ×" + o.normal + ", rest day ×" + o.rest + ", public holiday ×" + o.holiday + "   ·   approved overtime only", M, y + 4.5);
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    y += 7;
+
+    y += 7;
+    section(doc, "C. OVERTIME DAYS", y);
+    y += 2;
+    var rows = data.days.map(function (x, i) {
+      var ok = x.status === "approved";
+      return [i + 1, d(x.date), x.typeLabel, hmm(x.worked), hmm(x.asked), ok ? hmm(x.approved) : "—", "×" + x.rate, ok ? kd(x.amount) : "—",
+        ok ? "Approved" : x.status === "rejected" ? "Rejected" : "Waiting"];
+    });
+    if (!rows.length) rows.push(["", "No overtime this month", "", "", "", "", "", "", ""]);
+    else rows.push(["", "Total", "", "", "", hmm(r.mins.normal + r.mins.rest + r.mins.holiday), "", kd(r.otAmount), ""]);
+    y = table(doc, y, [["No.", 9], ["Date", 21], ["Day", 30, "left"], ["Worked", 19], ["OT asked", 19], ["Approved", 19], ["Rate", 13], ["KD", 22, "right"], ["Status", 30]], rows, { boldLast: data.days.length > 0 });
+
+    if (y + 30 > 280) { doc.addPage(); y = 20; } else { y += 16; }
+    doc.setFontSize(9.5);
+    [["Prepared by", data.by || ""], ["Employee signature", ""], ["Date", ""]].forEach(function (f, i) {
+      var x = M + i * 62;
+      doc.text(f[0] + ":", x, y);
+      doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+      doc.line(x, y + 9, x + 54, y + 9);
+      if (f[1]) doc.text(f[1], x, y + 7);
+    });
+    footer(doc, { claimNo: "Payslip " + data.label + " · " + (r.name || "") });
+    return doc;
+  }
+
+  window.EZPdf = { build: build, buildMonthly: buildMonthly, buildPayroll: buildPayroll, buildPayslip: buildPayslip, date: d, kd: kd };
 })();
