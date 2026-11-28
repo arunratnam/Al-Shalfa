@@ -1779,7 +1779,7 @@
   var TIME_DEFAULTS = {
     warehouses: [{ id: "ardiya", name: "Ardiya" }, { id: "shuaiba", name: "Shuaiba" }, { id: "mina", name: "Mina Abdulla" }, { id: "yard", name: "Open Yard" }],
     shifts: [{ id: "morning", name: "Morning", start: "06:00", end: "15:00" }, { id: "day", name: "Day", start: "08:00", end: "18:00" }],
-    ot: { daysPerMonth: 26, hoursPerDay: 8, normal: 1.25, rest: 1.5, holiday: 2, restDay: 5, roundMin: 15 },
+    ot: { standardHours: 10, daysPerMonth: 26, hoursPerDay: 8, normal: 1.25, rest: 1.5, holiday: 2, restDay: 5, roundMin: 15 },
     holidays: []
   };
 
@@ -1812,7 +1812,10 @@
   var DAY_LABEL = { normal: "", rest: "Friday / rest day", holiday: "Public holiday" };
   function holidayName(date) { var h = tcfg().holidays.filter(function (x) { return x.date === date; })[0]; return h ? h.name : ""; }
 
-  /** Worked minutes and overtime for one person on one day. OT = time beyond the shift length; on rest days and holidays all of it. */
+  /** Normal working minutes before overtime starts (company setting, 10 hours by default). */
+  function standardMin() { return Math.round((Number(tcfg().ot.standardHours) || 10) * 60); }
+
+  /** Worked minutes and overtime for one person on one day. OT = time beyond the normal working hours; on rest days and holidays all of it. */
   function dayCalc(entries, u, date, closedOnly) {
     var t = Date.now(), worked = 0;
     entries.forEach(function (e) {
@@ -1820,7 +1823,7 @@
       worked += Math.max(0, ((e.outAt || t) - e.inAt) / 60000);
     });
     worked = Math.round(worked);
-    var sh = shiftOf(u), sched = shiftMin(sh), type = dayType(date), round = Math.max(1, tcfg().ot.roundMin);
+    var sh = shiftOf(u), sched = standardMin(), type = dayType(date), round = Math.max(1, tcfg().ot.roundMin);
     var raw = type === "normal" ? Math.max(0, worked - sched) : worked;
     return { worked: worked, scheduled: type === "normal" ? sched : 0, ot: Math.floor(raw / round) * round, type: type, shift: shiftLabel(sh) };
   }
@@ -1883,7 +1886,7 @@
     if (open) {
       h += '<div class="att-where">At <b>' + esc(whName(open.warehouse)) + '</b> since ' + clock(open.inAt) + "</div></div>" +
         '<span class="status good">Clocked in</span></div>' +
-        '<div class="mini"><div><span>Today</span><b data-tick-day="' + td + '">' + hm(dc.worked) + "</b></div><div><span>Shift</span><b>" + hm(shiftMin(sh)) + "</b></div>" +
+        '<div class="mini"><div><span>Today</span><b data-tick-day="' + td + '">' + hm(dc.worked) + "</b></div><div><span>Normal day</span><b>" + hm(standardMin()) + "</b></div>" +
         "<div><span>Overtime</span><b>" + (dc.ot ? hm(dc.ot) : "—") + "</b></div></div>" +
         (type !== "normal" ? '<div class="banner warn">' + esc(holidayName(td) || DAY_LABEL[type]) + ": all hours today count as overtime.</div>" : "") +
         '<div class="btn-row"><button class="btn" data-act="att-switch">Switch warehouse</button><button class="btn bad" data-act="att-out">Clock out</button></div>';
@@ -1907,21 +1910,52 @@
     }).catch(function (e) { btn.disabled = false; toast(e.message); });
   }
 
+  /** The nearest warehouse with a saved location, within its allowed distance. */
+  function nearestWarehouse(loc) {
+    if (!loc) return null;
+    var best = null;
+    tcfg().warehouses.forEach(function (w) {
+      if (!w.lat) return;
+      var d = distM(loc, w);
+      if (d <= (Number(w.radius) || 300) && (!best || d < best.d)) best = { id: w.id, d: d };
+    });
+    return best ? best.id : null;
+  }
+
   function attOut() {
     var open = openEntry(st.att, st.user.uid);
     if (!open) return;
-    sheet("<h2>Clock out?</h2><p class=\"sub\">You're at " + esc(whName(open.warehouse)) + " since " + clock(open.inAt) + " (" + hm((Date.now() - open.inAt) / 60000) + ").</p>" +
-      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn bad" id="o-go">Clock out</button></div>', function (el, close) {
+    var chosen = open.warehouse, loc = null;
+    var h = "<h2>Clock out</h2><p class=\"sub\" style=\"margin-top:-6px\">Clocked in at " + esc(whName(open.warehouse)) + " at " + clock(open.inAt) + " · " + hm((Date.now() - open.inAt) / 60000) + " so far.</p>" +
+      '<div class="stack"><div class="eyebrow">Where are you now?</div><div class="wh-grid">' + tcfg().warehouses.map(function (w) {
+        return '<button class="wh-btn' + (w.id === chosen ? " sel" : "") + '" data-out="' + esc(w.id) + '"><b>' + esc(w.name) + "</b><span>" + (w.id === open.warehouse ? "Same place" : "Finishing here") + "</span></button>";
+      }).join("") + '</div><div class="hint" id="o-hint" style="font-size:12.5px;color:var(--muted)">Checking your location…</div>' +
+      '<p class="sub" style="margin:0;font-size:12.5px">All your hours count for overtime, wherever you finish.</p>' +
+      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn bad" id="o-go">Clock out</button></div></div>';
+    sheet(h, function (el, close) {
+      function pick(id) {
+        chosen = id;
+        el.querySelectorAll("[data-out]").forEach(function (b) { b.classList.toggle("sel", b.getAttribute("data-out") === id); });
+      }
+      el.querySelectorAll("[data-out]").forEach(function (b) { b.onclick = function () { pick(b.getAttribute("data-out")); }; });
+      getLocation().then(function (l) {
+        loc = l;
+        var near = nearestWarehouse(l), hint = el.querySelector("#o-hint");
+        if (!hint) return;
+        if (near) { pick(near); hint.textContent = "Your location shows you at " + whName(near) + "."; }
+        else hint.textContent = l ? "Choose where you are now." : "No location: choose where you are now.";
+      });
       el.querySelector("#o-go").onclick = function () {
-        this.disabled = true;
-        getLocation().then(function (loc) {
-          return S.clockOut(open.id, loc).then(function () {
+        var btn = this;
+        btn.disabled = true;
+        (loc ? Promise.resolve(loc) : getLocation()).then(function (l) {
+          return S.clockOut(open.id, l, chosen !== open.warehouse ? chosen : null).then(function () {
             close();
-            toast("Clocked out");
+            toast("Clocked out" + (chosen !== open.warehouse ? " at " + whName(chosen) : ""));
             var copy = st.att.map(function (e) { return e.id === open.id ? Object.assign({}, e, { outAt: Date.now() }) : e; });
             syncOtDay(st.user.uid, open.date, copy);
           });
-        }).catch(function (e) { toast(e.message); });
+        }).catch(function (e) { btn.disabled = false; toast(e.message); });
       };
     });
   }
@@ -1976,7 +2010,7 @@
     Object.keys(days).forEach(function (d) { worked += dayCalc(days[d], st.user, d, false).worked; });
     var appr = sum(ots.filter(function (o) { return o.status === "approved"; }), function (o) { return o.approvedMin || 0; });
     var wait = sum(ots.filter(function (o) { return o.status === "pending"; }), function (o) { return o.otMin || 0; });
-    var h = '<h1>My time</h1><p class="sub">' + esc(shiftLabel(shiftOf(st.user))) + "</p>" + monthChips(myHref("time") + "/", m, keys) +
+    var h = '<h1>My time</h1><p class="sub">' + esc(shiftLabel(shiftOf(st.user))) + " · overtime after " + hm(standardMin()) + " a day</p>" + monthChips(myHref("time") + "/", m, keys) +
       '<div class="kpis">' + kpi("Days worked", Object.keys(days).length, "", "") + kpi("Hours worked", hm(worked), "", "") +
       kpi("Overtime approved", hm(appr), "", "") + kpi("Overtime waiting", hm(wait), "", "", wait > 0) + "</div>";
     var list = Object.keys(days).sort().reverse();
@@ -1986,7 +2020,7 @@
       var c = dayCalc(days[d], st.user, d, false), o = ots.filter(function (x) { return x.date === d; })[0];
       return '<div class="day-row"><div class="main"><b>' + esc(fmtDate(d)) + (c.type !== "normal" ? ' <span class="status info">' + esc(holidayName(d) || DAY_LABEL[c.type]) + "</span>" : "") + "</b>" +
         days[d].sort(function (a, b) { return a.inAt - b.inAt; }).map(function (e) {
-          return "<span>" + esc(whName(e.warehouse)) + " · " + clock(e.inAt) + "–" + (e.outAt ? clock(e.outAt) : "now") + (e.source === "supervisor" || e.editedBy ? " · by " + esc(e.editedBy || "supervisor") : "") + "</span>";
+          return "<span>" + esc(whName(e.warehouse)) + (e.outWarehouse ? " → " + esc(whName(e.outWarehouse)) : "") + " · " + clock(e.inAt) + "–" + (e.outAt ? clock(e.outAt) : "now") + (e.source === "supervisor" || e.editedBy ? " · by " + esc(e.editedBy || "supervisor") : "") + "</span>";
         }).join("") + '</div><div class="side"><b>' + hm(c.worked) + "</b>" + (o ? otChip(o) : c.ot ? '<span class="status muted">OT ' + hm(c.ot) + "</span>" : "") + "</div></div>";
     }).join("") + "</div>";
     return h;
@@ -2041,7 +2075,7 @@
     var done = st.allOt.filter(function (o) { return o.status !== "pending"; }).sort(function (a, b) { return (b.decidedAt || 0) - (a.decidedAt || 0); }).slice(0, 15);
     var h = pend.length ? '<div class="card flush">' + pend.map(function (o) {
       return '<div class="day-row"><div class="main"><b>' + esc(o.staffName) + " · " + esc(fmtDate(o.date)) + (o.dayType !== "normal" ? ' <span class="status info">' + esc(holidayName(o.date) || DAY_LABEL[o.dayType]) + "</span>" : "") + "</b>" +
-        "<span>Worked " + hm(o.workedMin) + (o.scheduledMin ? " · shift " + hm(o.scheduledMin) : "") + " · " + esc(o.shift || "") + "</span>" + (o.note ? '<span class="warnline">' + esc(o.note) + "</span>" : "") +
+        "<span>Worked " + hm(o.workedMin) + (o.scheduledMin ? " · normal day " + hm(o.scheduledMin) : "") + " · " + esc(o.shift || "") + "</span>" + (o.note ? '<span class="warnline">' + esc(o.note) + "</span>" : "") +
         '<a class="link" href="#/time/entries/' + monthOf(o.date) + '" style="text-align:left;font-size:13px">See time entries</a></div>' +
         '<div class="side"><b>OT ' + hm(o.otMin) + '</b><div class="row"><button class="btn small good" data-act="ot-ok" data-id="' + esc(o.id) + '">Approve</button>' +
         '<button class="btn small" data-act="ot-change" data-id="' + esc(o.id) + '">Change</button><button class="btn small bad" data-act="ot-no" data-id="' + esc(o.id) + '">Reject</button></div></div></div>';
@@ -2094,9 +2128,9 @@
         if (e.source === "supervisor") flags.push("Added by " + (e.editedBy || "supervisor"));
         else if (e.editedBy) flags.push("Edited by " + e.editedBy);
         if (li.warn) flags.push("In: " + li.text);
-        if (e.outAt && e.source !== "supervisor") { var lo = locNote(e.warehouse, e.outLoc); if (lo.warn) flags.push("Out: " + lo.text); }
+        if (e.outAt && e.source !== "supervisor") { var lo = locNote(e.outWarehouse || e.warehouse, e.outLoc); if (lo.warn) flags.push("Out: " + lo.text); }
         if (lateSync(e, "in") || lateSync(e, "out")) flags.push("Sent late (no signal?)");
-        return "<tr><td>" + esc(fmtDate(e.date)) + "</td><td>" + esc(e.staffName) + "</td><td>" + esc(whName(e.warehouse)) + "</td><td>" + clock(e.inAt) + "</td><td>" + (e.outAt ? clock(e.outAt) : '<span class="status good">in</span>') +
+        return "<tr><td>" + esc(fmtDate(e.date)) + "</td><td>" + esc(e.staffName) + "</td><td>" + esc(whName(e.warehouse)) + (e.outWarehouse ? " → " + esc(whName(e.outWarehouse)) : "") + "</td><td>" + clock(e.inAt) + "</td><td>" + (e.outAt ? clock(e.outAt) : '<span class="status good">in</span>') +
           '</td><td class="r">' + hm(((e.outAt || Date.now()) - e.inAt) / 60000) + '</td><td style="white-space:normal;font-size:12.5px;color:' + (flags.length ? "var(--warn)" : "var(--muted)") + '">' + esc(flags.join(" · ") || "OK") + "</td><td>" +
           (e.ownerUid !== st.user.uid ? '<button class="btn small" data-act="entry-edit" data-id="' + esc(e.id) + '">Edit</button>' : "") + "</td></tr>";
       }).join("") + "</tbody></table></div>";
@@ -2134,9 +2168,12 @@
         return '<option value="' + esc(u.uid) + '"' + (u.uid === uid ? " selected" : "") + ">" + esc(u.name) + "</option>";
       }).join("") + "</select></div>" +
       '<div class="grid2"><div class="field"><label for="en-date">Date</label><input id="en-date" type="date" value="' + date + '" max="' + today() + '"></div>' +
-      '<div class="field"><label for="en-wh">Warehouse</label><select id="en-wh">' + tcfg().warehouses.map(function (w) {
+      '<div class="field"><label for="en-wh">Started at</label><select id="en-wh">' + tcfg().warehouses.map(function (w) {
         return '<option value="' + esc(w.id) + '"' + (e && e.warehouse === w.id ? " selected" : "") + ">" + esc(w.name) + "</option>";
       }).join("") + "</select></div></div>" +
+      '<div class="field"><label for="en-owh">Finished at</label><select id="en-owh"><option value="">Same warehouse</option>' + tcfg().warehouses.map(function (w) {
+        return '<option value="' + esc(w.id) + '"' + (e && e.outWarehouse === w.id ? " selected" : "") + ">" + esc(w.name) + "</option>";
+      }).join("") + "</select></div>" +
       '<div class="grid2"><div class="field"><label for="en-in">Clock in</label><input id="en-in" type="time" value="' + (e ? clock(e.inAt) : shiftOf(userById(uid)).start) + '"></div>' +
       '<div class="field"><label for="en-out">Clock out</label><input id="en-out" type="time" value="' + (e && e.outAt ? clock(e.outAt) : e ? clock(Date.now()) : shiftOf(userById(uid)).end) + '"><span class="hint">Leave empty if still working.</span></div></div>' +
       '<div class="field"><label for="en-note">Note</label><input id="en-note" value="' + esc(e && e.note || "") + '" placeholder="e.g. forgot to clock out"></div>' +
@@ -2161,6 +2198,8 @@
         if (e && e.outServer) entry.outServer = e.outServer;
         entry.date = d;
         entry.warehouse = el.querySelector("#en-wh").value;
+        var owh = el.querySelector("#en-owh").value;
+        if (owh && owh !== entry.warehouse) entry.outWarehouse = owh; else delete entry.outWarehouse;
         entry.inAt = inAt;
         entry.outAt = outAt;
         entry.note = el.querySelector("#en-note").value.trim();
@@ -2182,10 +2221,10 @@
   }
 
   function exportAttendanceCsv(m) {
-    var rows = [["Date", "Staff", "Employee ID", "Warehouse", "Clock in", "Clock out", "Hours", "In location", "Out location", "Source", "Edited by", "Note"]];
+    var rows = [["Date", "Staff", "Employee ID", "Warehouse (in)", "Warehouse (out)", "Clock in", "Clock out", "Hours", "In location", "Out location", "Source", "Edited by", "Note"]];
     st.allAtt.filter(function (e) { return monthOf(e.date) === m; }).sort(function (a, b) { return a.inAt - b.inAt; }).forEach(function (e) {
       var u = userById(e.ownerUid);
-      rows.push([e.date, e.staffName, u.employeeId || "", whName(e.warehouse), clock(e.inAt), e.outAt ? clock(e.outAt) : "", e.outAt ? hours((e.outAt - e.inAt) / 60000) : "",
+      rows.push([e.date, e.staffName, u.employeeId || "", whName(e.warehouse), whName(e.outWarehouse || e.warehouse), clock(e.inAt), e.outAt ? clock(e.outAt) : "", e.outAt ? hours((e.outAt - e.inAt) / 60000) : "",
         e.inLoc ? e.inLoc.lat + " " + e.inLoc.lng : "", e.outLoc ? e.outLoc.lat + " " + e.outLoc.lng : "", e.source, e.editedBy || "", e.note || ""]);
     });
     saveFile(new Blob(["﻿" + rows.map(csvLine).join("\r\n")], { type: "text/csv" }), "Attendance " + monthLabel(m) + ".csv");
@@ -2265,13 +2304,13 @@
       '<div class="card stack"><div class="eyebrow">Shifts</div>' + c.shifts.map(function (sh, i) {
         return '<div class="set-row" data-sh="' + i + '"><input aria-label="Shift name" data-k="name" value="' + esc(sh.name) + '"><input aria-label="Start" type="time" data-k="start" value="' + esc(sh.start) + '"><input aria-label="End" type="time" data-k="end" value="' + esc(sh.end) + '">' +
           (c.shifts.length > 1 ? '<button type="button" class="btn small bad" data-act="sh-del" data-i="' + i + '">Remove</button>' : "") + "</div>";
-      }).join("") + '<button type="button" class="btn small" data-act="sh-add">+ Add shift</button><p class="sub" style="margin:0;font-size:12.5px">Choose each person\'s shift on the People page.</p></div>' +
+      }).join("") + '<button type="button" class="btn small" data-act="sh-add">+ Add shift</button><p class="sub" style="margin:0;font-size:12.5px">The shift shows when each person is expected to start. Choose it on the People page.</p></div>' +
       '<div class="card stack"><div class="eyebrow">Overtime rules (Kuwait Labour Law)</div><div class="grid3">' +
-      [["daysPerMonth", "Days per month"], ["hoursPerDay", "Hours per day"], ["roundMin", "Count OT in blocks of (min)"], ["normal", "Normal day ×"], ["rest", "Rest day ×"], ["holiday", "Public holiday ×"]].map(function (f) {
+      [["standardHours", "Normal hours per day (OT after)"], ["daysPerMonth", "Days per month (wage)"], ["hoursPerDay", "Hours per day (wage)"], ["roundMin", "Count OT in blocks of (min)"], ["normal", "Normal day ×"], ["rest", "Rest day ×"], ["holiday", "Public holiday ×"]].map(function (f) {
         return '<div class="field"><label for="ot-' + f[0] + '">' + f[1] + '</label><input id="ot-' + f[0] + '" data-ot="' + f[0] + '" type="number" step="0.01" min="0" value="' + c.ot[f[0]] + '"></div>';
       }).join("") + '</div><div class="field"><label for="ot-restDay">Weekly rest day</label><select id="ot-restDay" data-ot="restDay">' +
       ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(function (d, i) { return '<option value="' + i + '"' + (Number(c.ot.restDay) === i ? " selected" : "") + ">" + d + "</option>"; }).join("") + "</select></div>" +
-      '<p class="sub" style="margin:0;font-size:12.5px">Hourly wage = salary ÷ days per month ÷ hours per day. On the rest day and public holidays every hour worked is overtime.</p></div>' +
+      '<p class="sub" style="margin:0;font-size:12.5px">Overtime = hours worked in a day beyond the normal hours, wherever the person worked. On the rest day and public holidays every hour worked is overtime. Hourly wage = salary ÷ days per month ÷ hours per day.</p></div>' +
       '<div class="card stack"><div class="eyebrow">Public holidays</div>' + (c.holidays.length ? c.holidays.slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).map(function (x) {
         return '<div class="spread"><span><b>' + esc(fmtDate(x.date)) + "</b> · " + esc(x.name) + '</span><button type="button" class="link" data-act="hol-del" data-d="' + esc(x.date) + '">Remove</button></div>';
       }).join("") : '<span class="sub" style="margin:0">None yet</span>') +

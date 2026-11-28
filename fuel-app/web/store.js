@@ -706,10 +706,11 @@
           outAt: null, outLoc: null, source: "self", createdAt: t
         }).then(function () { return ref.id; }).catch(function (e) { throw clockError(e); });
       },
-      clockOut: function (id, loc) {
-        return db.collection("attendance").doc(id).update({
-          outAt: now(), outServer: firebase.firestore.FieldValue.serverTimestamp(), outLoc: loc || null, updatedAt: now()
-        }).catch(function (e) { throw clockError(e); });
+      /** Clock out now; outWarehouse is set when the person finishes at a different warehouse. */
+      clockOut: function (id, loc, outWarehouse) {
+        var f = { outAt: now(), outServer: firebase.firestore.FieldValue.serverTimestamp(), outLoc: loc || null, updatedAt: now() };
+        if (outWarehouse) f.outWarehouse = outWarehouse;
+        return db.collection("attendance").doc(id).update(f).catch(function (e) { throw clockError(e); });
       },
       /** Leave one warehouse and start at another in one step. */
       switchWarehouse: function (openId, warehouse, loc, date) {

@@ -107,9 +107,9 @@ service cloud.firestore {
       allow create: if (mine(request.resource.data) && request.resource.data.source == 'self'
                         && request.resource.data.outAt == null && freshIn())
         || (isOffice() && request.resource.data.ownerUid != request.auth.uid && request.resource.data.source == 'supervisor');
-      // staff can only clock out of their own open entry; supervisors can correct other people's entries
+      // staff can only clock out of their own open entry (possibly at another warehouse); supervisors can correct other people's entries
       allow update: if (mine(resource.data) && resource.data.source == 'self' && resource.data.outAt == null
-                        && changes().hasOnly(['outAt', 'outServer', 'outLoc', 'updatedAt']) && freshOut())
+                        && changes().hasOnly(['outAt', 'outServer', 'outLoc', 'outWarehouse', 'updatedAt']) && freshOut())
         || (isOffice() && resource.data.ownerUid != request.auth.uid && request.resource.data.ownerUid == resource.data.ownerUid);
       allow delete: if isOffice() && resource.data.ownerUid != request.auth.uid;
     }
