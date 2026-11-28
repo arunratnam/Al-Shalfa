@@ -2806,7 +2806,7 @@
   function viewMap(date) {
     date = date || today();
     mapState.date = date;
-    return '<div class="card flush"><div id="map" class="map"></div></div>' +
+    return '<div class="card flush"><div id="map" class="map" data-notr></div></div>' +
       '<div class="spread" style="margin:14px 0 8px"><h2 style="margin:0">People on the map</h2>' +
       '<input type="date" class="mini-date" data-mapdate="1" aria-label="Route date" value="' + esc(date) + '" max="' + esc(today()) + '"></div>' +
       '<div class="card flush list" id="map-list"></div>' +
@@ -2837,9 +2837,22 @@
     loadLeaflet().then(function () {
       if (!document.getElementById("map") || document.getElementById("map") !== el) return;
       var m = L.map(el, { zoomControl: true, attributionControl: true });
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      }).addTo(m);
+      var osm = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+      // street names: English map (CARTO) for English, local Arabic map (OpenStreetMap) for Arabic
+      var english = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19, subdomains: "abcd", attribution: osm + ' &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      });
+      var arabic = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: osm });
+      var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19, attribution: "Imagery &copy; Esri"
+      });
+      var saved = "";
+      try { saved = localStorage.getItem("ezstaff-maplayer") || ""; } catch (e) {}
+      var layers = { "Map (English)": english, "Map (العربية)": arabic, "Satellite": sat };
+      var first = layers[saved] || (curLang() === "ar" ? arabic : english);
+      first.addTo(m);
+      L.control.layers(layers, null, { position: "topright" }).addTo(m);
+      m.on("baselayerchange", function (e) { try { localStorage.setItem("ezstaff-maplayer", e.name); } catch (x) {} });
       m.setView([29.2, 48.0], 10); // Kuwait
       mapState.map = m;
       mapState.layers = L.layerGroup().addTo(m);
