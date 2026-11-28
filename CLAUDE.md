@@ -63,9 +63,9 @@ Ask for them before building an Android update; without the same key, phones mus
   the whole day on the rest day (Friday) and on public holidays; rounded down to 15 minutes. Shifts only show the
   expected start. Staff may clock out at a different warehouse (`outWarehouse`, suggested from GPS).
   Stored in `ot/{uid}_{date}` as `pending`; supervisors, managers and the admin approve, change or reject it.
-- Payroll (managers and admin only): hourly wage = salary ÷ 26 ÷ 8, OT ×1.25, rest day ×1.5, holiday ×2 (editable in
-  `settings/company`). Salaries live in `pay/{uid}`, readable by managers and the admin, writable by the admin only.
-  Staff and supervisors never see KD for time.
+- Payroll (admin only): hourly wage = salary ÷ 26 ÷ 8, OT ×1.25, rest day ×1.5, holiday ×2 (editable in
+  `settings/company`). Salaries live in `pay/{uid}`, readable and writable by the admin only.
+  Staff, supervisors and managers never see salaries or KD for time; supervisors and managers approve OT in hours.
 - Company settings (admin): warehouses with GPS location and radius, shifts (Morning 06:00–16:00, Day 08:00–18:00),
   OT rules, public holidays. Each person's shift is set on the People page.
 

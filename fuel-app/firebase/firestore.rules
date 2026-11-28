@@ -81,9 +81,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ---- salaries: only managers and the admin can see them, only the admin sets them ----
+    // ---- salaries: only the admin can see and set them ----
     match /pay/{uid} {
-      allow read: if canApprove();
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 

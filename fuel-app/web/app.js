@@ -349,7 +349,7 @@
     var items;
     if (isOffice()) {
       items = [["home", "Dashboard", ICON.office], ["time", "Time", ICON.clock], ["claims", "Fuel", ICON.fuel]];
-      if (canApprove()) items.push(["payroll", "Payroll", ICON.money]);
+      if (isAdmin()) items.push(["payroll", "Payroll", ICON.money]);
       items.push(["mine", "Me", ICON.user]);
       if (isAdmin()) items.push(["users", "People", ICON.users]);
     } else if (LOCAL) {
@@ -2248,7 +2248,7 @@
   }
 
   function viewPayroll(m) {
-    if (!canApprove()) return '<div class="card empty"><b>Managers and admin only</b></div>';
+    if (!isAdmin()) return '<div class="card empty"><b>Admin only</b>Salaries and payroll are handled by the admin.</div>';
     var keys = lastMonths(3);
     if (!m || keys.indexOf(m) < 0) m = keys[0];
     var rows = payrollRows(m), c = tcfg().ot;
@@ -2273,7 +2273,7 @@
   function salarySheet(uid) {
     var u = userById(uid), cur = (st.pay[uid] || {}).salary || "";
     sheet("<h2>Salary · " + esc(u.name) + '</h2><div class="stack"><div class="field"><label for="sal">Monthly salary (KD)</label><input id="sal" type="number" min="0" step="0.001" inputmode="decimal" value="' + esc(cur) + '">' +
-      '<span class="hint">Only managers and the admin can see this.</span></div><div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn primary" id="sal-go">Save</button></div></div>', function (el, close) {
+      '<span class="hint">Only the admin can see salaries.</span></div><div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn primary" id="sal-go">Save</button></div></div>', function (el, close) {
       el.querySelector("#sal-go").onclick = function () {
         var v = parseFloat(el.querySelector("#sal").value);
         if (isNaN(v) || v < 0) { toast("Enter the salary in KD."); return; }
@@ -2662,7 +2662,7 @@
       var from = new Date(); from = new Date(from.getFullYear(), from.getMonth() - 1, 1);
       st.unsub.push(S.watchAttendance("all", dateOf(from.getTime()), function (list) { st.allAtt = list; refresh(); }));
       st.unsub.push(S.watchOt("all", function (list) { st.allOt = list; refresh(); }));
-      if (canApprove()) st.unsub.push(S.watchPay(function (m) { st.pay = m; refresh(); }));
+      if (isAdmin()) st.unsub.push(S.watchPay(function (m) { st.pay = m; refresh(); }));
       st.unsub.push(S.watchBills(function (list) { st.allBills = list; refresh(); }, "all"));
       st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
       st.unsub.push(S.watchUsers(function (list) { st.users = list; refresh(); }));
