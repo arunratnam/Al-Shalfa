@@ -2838,9 +2838,9 @@
       if (!document.getElementById("map") || document.getElementById("map") !== el) return;
       var m = L.map(el, { zoomControl: true, attributionControl: true });
       var osm = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-      // street names: English map (CARTO) for English, local Arabic map (OpenStreetMap) for Arabic
-      var english = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        maxZoom: 19, subdomains: "abcd", attribution: osm + ' &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      // street names: English map (Esri) for English, local Arabic map (OpenStreetMap) for Arabic
+      var english = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19, attribution: "Map &copy; Esri, HERE, Garmin, " + osm
       });
       var arabic = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: osm });
       var sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
