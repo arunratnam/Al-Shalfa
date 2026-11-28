@@ -66,7 +66,7 @@ Ask for them before building an Android update; without the same key, phones mus
 - Payroll (managers and admin only): hourly wage = salary ÷ 26 ÷ 8, OT ×1.25, rest day ×1.5, holiday ×2 (editable in
   `settings/company`). Salaries live in `pay/{uid}`, readable by managers and the admin, writable by the admin only.
   Staff and supervisors never see KD for time.
-- Company settings (admin): warehouses with GPS location and radius, shifts (Morning 06:00–15:00, Day 08:00–18:00),
+- Company settings (admin): warehouses with GPS location and radius, shifts (Morning 06:00–16:00, Day 08:00–18:00),
   OT rules, public holidays. Each person's shift is set on the People page.
 
 ## Versions so far

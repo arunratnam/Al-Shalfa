@@ -1778,7 +1778,7 @@
 
   var TIME_DEFAULTS = {
     warehouses: [{ id: "ardiya", name: "Ardiya" }, { id: "shuaiba", name: "Shuaiba" }, { id: "mina", name: "Mina Abdulla" }, { id: "yard", name: "Open Yard" }],
-    shifts: [{ id: "morning", name: "Morning", start: "06:00", end: "15:00" }, { id: "day", name: "Day", start: "08:00", end: "18:00" }],
+    shifts: [{ id: "morning", name: "Morning", start: "06:00", end: "16:00" }, { id: "day", name: "Day", start: "08:00", end: "18:00" }],
     ot: { standardHours: 10, daysPerMonth: 26, hoursPerDay: 8, normal: 1.25, rest: 1.5, holiday: 2, restDay: 5, roundMin: 15 },
     holidays: []
   };
