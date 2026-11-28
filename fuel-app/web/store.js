@@ -437,7 +437,7 @@
         var f = JSON.parse(sessionStorage.getItem("ezfuel-signup") || "{}");
         var p2 = {
           name: f.name || user.email.split("@")[0], email: user.email, employeeId: f.employeeId || "",
-          department: f.department || "", vehicle: f.vehicle || "", role: "driver", active: false, pending: true, createdAt: now()
+          department: f.department || "", vehicle: f.vehicle || "", role: "driver", active: false, pending: true, fuel: false, createdAt: now()
         };
         return db.collection("users").doc(user.uid).set(p2).then(function () {
           sessionStorage.removeItem("ezfuel-signup");
@@ -486,7 +486,7 @@
               if (!s.exists || !current || current.uid !== user.uid) return;
               var x = s.data();
               x.uid = user.uid;
-              if (x.active !== current.active || x.role !== current.role || x.pending !== current.pending) {
+              if (x.active !== current.active || x.role !== current.role || x.pending !== current.pending || x.fuel !== current.fuel) {
                 current = x;
                 cb(x);
               } else {

@@ -17,6 +17,7 @@ service cloud.firestore {
     function num(v) { return v is int || v is float; }
     function was(s) { return resource.data.status == s; }
     function now(s) { return request.resource.data.status == s; }
+    function fuelAllowed() { return me().get('fuel', true) != false; }
 
     // ---- people ----
     match /users/{uid} {
@@ -25,14 +26,14 @@ service cloud.firestore {
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role == 'driver' && request.resource.data.active == false && request.resource.data.pending == true;
       // people edit their own details, never their role or whether they are allowed
-      allow update: if (signedIn() && request.auth.uid == uid && !changes().hasAny(['role', 'active', 'pending', 'email', 'allowedAt', 'allowedBy'])) || isAdmin();
+      allow update: if (signedIn() && request.auth.uid == uid && !changes().hasAny(['role', 'active', 'pending', 'fuel', 'email', 'allowedAt', 'allowedBy'])) || isAdmin();
       allow delete: if isAdmin();
     }
 
     // ---- fuel bills ----
     match /bills/{id} {
       allow read: if mine(resource.data) || isOffice();
-      allow create: if mine(request.resource.data) && request.resource.data.claimId == null
+      allow create: if mine(request.resource.data) && fuelAllowed() && request.resource.data.claimId == null
         && request.resource.data.date is string && num(request.resource.data.odometer)
         && num(request.resource.data.litres) && request.resource.data.litres > 0
         && num(request.resource.data.amount) && request.resource.data.amount > 0;
@@ -45,7 +46,7 @@ service cloud.firestore {
     // ---- claims ----
     match /claims/{id} {
       allow read: if mine(resource.data) || isOffice();
-      allow create: if mine(request.resource.data) && request.resource.data.status == 'submitted'
+      allow create: if mine(request.resource.data) && fuelAllowed() && request.resource.data.status == 'submitted'
         && !request.resource.data.keys().hasAny(['verifiedAt', 'approvedAt', 'paidAt', 'paidAmount', 'paidRef', 'paidBy']);
 
       // office decisions; never on your own claim, and the bills inside a claim never change

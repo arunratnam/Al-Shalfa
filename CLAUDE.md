@@ -69,7 +69,13 @@ Ask for them before building an Android update; without the same key, phones mus
 - Company settings (admin): warehouses with GPS location and radius, shifts (Morning 06:00–16:00, Day 08:00–18:00),
   OT rules, public holidays. Each person's shift is set on the People page.
 
+## Fuel allowance (2.5)
+
+- `users/{uid}.fuel`: `false` means attendance only (no bills, claims or fuel on Home). New accounts start with
+  `fuel: false`; accounts without the field keep fuel. The admin ticks **Fuel allowance** per person on People.
+- Rules: bills and claims create require `me().get('fuel', true) != false`; people can't change their own `fuel`.
+
 ## Versions so far
 
-EZ Staff 2.4 (attendance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+EZ Staff 2.5 (attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
 `com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).

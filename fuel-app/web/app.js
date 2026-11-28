@@ -58,6 +58,8 @@
   // Online roles: driver (staff) < supervisor (verifies) < manager (approves, pays) < admin (also manages people)
   function role() { return !LOCAL && st.user ? st.user.role || "driver" : "driver"; }
   function isAdmin() { return role() === "admin"; }
+  /** Fuel allowance: people without it only use attendance. Accounts from before this setting keep fuel. */
+  function hasFuel(u) { return LOCAL || !u || u.fuel !== false; }
   function isOffice() { return ["supervisor", "manager", "admin"].indexOf(role()) >= 0; }
   function canApprove() { return role() === "manager" || role() === "admin"; }
   /** What the signed-in person may do with a claim (never on their own claim). */
@@ -355,6 +357,8 @@
     } else if (LOCAL) {
       items = [["home", "Home", ICON.home], ["bills", "Bills", ICON.fuel], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
         ["claims", "Claims", ICON.list], ["reports", "Monthly", ICON.office]];
+    } else if (!hasFuel(st.user)) {
+      items = [["home", "Home", ICON.home], ["time", "My time", ICON.clock], ["profile", "Profile", ICON.user]];
     } else if (true) {
       items = [["home", "Home", ICON.home], ["time", "My time", ICON.clock], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
         ["bills", "Bills", ICON.fuel], ["claims", "Claims", ICON.list]];
@@ -497,6 +501,17 @@
     var curAmount = sum(cur, function (b) { return Number(b.amount) || 0; }), curLitres = sum(cur, function (b) { return Number(b.litres) || 0; });
     var last = mine.filter(function (c) { return c.status !== "draft"; }).sort(function (x, y) { return (y.submittedAt || 0) - (x.submittedAt || 0); })[0];
     var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>" + uploadBanner() + attendanceCard();
+    if (!hasFuel(st.user)) {
+      var mk = monthOf(today()), myAtt = st.att.filter(function (e) { return monthOf(e.date) === mk; }), dset = {};
+      myAtt.forEach(function (e) { dset[e.date] = 1; });
+      var wk = 0;
+      Object.keys(dset).forEach(function (d) { wk += dayCalc(myAtt, st.user, d, false).worked; });
+      var myOt = st.ot.filter(function (o) { return monthOf(o.date) === mk; });
+      return h + '<div class="section-title" style="margin-top:18px"><h2>This month</h2><a href="' + myHref("time") + '">Details</a></div><div class="kpis">' +
+        kpi("Days worked", Object.keys(dset).length, "", "") + kpi("Hours worked", hm(wk), "", "") +
+        kpi("Overtime approved", hm(sum(myOt.filter(function (o) { return o.status === "approved"; }), function (o) { return o.approvedMin || 0; })), "", "") +
+        kpi("Overtime waiting", hm(sum(myOt.filter(function (o) { return o.status === "pending"; }), function (o) { return o.otMin || 0; })), "", "") + "</div>";
+    }
     if (!LOCAL) h += '<div class="section-title" style="margin-top:18px"><h2>Fuel</h2></div>';
 
     // the bills collected for the next claim, counted separately from claimed / paid bills
@@ -1197,7 +1212,7 @@
     if (!isAdmin()) return '<div class="card empty"><b>Admin only</b></div>';
     var order = function (u) { return u.pending && u.active === false ? 0 : u.active === false ? 2 : 1; };
     var users = st.users.slice().sort(function (a, b) { return order(a) - order(b) || (a.name || "").localeCompare(b.name || ""); });
-    var h = '<div class="spread"><h1>People</h1><a class="btn small" href="#/settings">Company settings</a></div><p class="sub">Everyone who has created an account. New accounts can\'t use the app until you allow them. Choose each person\'s role and shift here.</p><div class="card flush list">';
+    var h = '<div class="spread"><h1>People</h1><a class="btn small" href="#/settings">Company settings</a></div><p class="sub">Everyone who has created an account. New accounts can\'t use the app until you allow them. Choose each person\'s role and shift here. Tick Fuel allowance only for people who claim fuel; everyone else uses attendance only.</p><div class="card flush list">';
     h += users.map(function (u) {
       var me = u.uid === st.user.uid, state = u.pending && u.active === false ? '<span class="status warn">Waiting to be allowed</span>'
         : u.active === false ? '<span class="status bad">Turned off</span>' : '<span class="status good">Allowed</span>';
@@ -1209,7 +1224,8 @@
       var shiftPick = '<select aria-label="Shift for ' + esc(u.name) + '" data-shift="' + esc(u.uid) + '">' + tcfg().shifts.map(function (sh) {
         return '<option value="' + esc(sh.id) + '"' + (shiftOf(u).id === sh.id ? " selected" : "") + ">" + esc(shiftLabel(sh)) + "</option>";
       }).join("") + "</select>";
-      btn = pick + shiftPick + btn;
+      var fuelTog = '<label class="fuel-tog"><input type="checkbox" data-fuel="' + esc(u.uid) + '"' + (hasFuel(u) ? " checked" : "") + "> Fuel allowance</label>";
+      btn = pick + shiftPick + fuelTog + btn;
       return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + (me ? " (you)" : "") + "</b><span>" + esc(u.email || "") +
         " · " + esc(u.employeeId || "no ID") + " · " + esc(u.vehicle || "no vehicle") + '</span></div><div class="side">' + state + btn + "</div></div>";
     }).join("");
@@ -1589,7 +1605,7 @@
 
   function drivers() {
     var byUid = {};
-    st.users.forEach(function (u) { if (!u.pending) byUid[u.uid] = { uid: u.uid, name: u.name, vehicle: u.vehicle, employeeId: u.employeeId, active: u.active !== false }; });
+    st.users.forEach(function (u) { if (!u.pending && (hasFuel(u) || st.allBills.some(function (b) { return b.ownerUid === u.uid; }))) byUid[u.uid] = { uid: u.uid, name: u.name, vehicle: u.vehicle, employeeId: u.employeeId, active: u.active !== false }; });
     st.allBills.forEach(function (b) { if (!byUid[b.ownerUid]) byUid[b.ownerUid] = { uid: b.ownerUid, name: b.driverName || "Driver", vehicle: "", active: true }; });
     return Object.keys(byUid).map(function (k) { return byUid[k]; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
   }
@@ -2416,6 +2432,10 @@
     var page = parts[0] || "home", id = parts[1];
     var html;
     draftPad = null;
+    if (!hasFuel(st.user) && (["bills", "add", "new", "make-claim", "my-claims", "my-reports"].indexOf(page) >= 0 ||
+        (!isOffice() && ["claims", "claim", "reports", "edit"].indexOf(page) >= 0))) {
+      page = isOffice() ? "mine" : "home";
+    }
     switch (page) {
       case "claims": html = viewClaims(); break;
       case "claim": html = viewClaim(id, false); break;
@@ -2618,6 +2638,8 @@
     var t = e.target;
     if (t.hasAttribute("data-role")) {
       S.setUser(t.getAttribute("data-role"), { role: t.value }).then(function () { toast("Role changed to " + (S.ROLE_LABELS[t.value] || t.value)); }).catch(function (x) { toast(x.message); });
+    } else if (t.hasAttribute("data-fuel")) {
+      S.setUser(t.getAttribute("data-fuel"), { fuel: t.checked }).then(function () { toast(t.checked ? "Fuel allowance on" : "Fuel allowance off: attendance only"); }).catch(function (x) { toast(x.message); });
     } else if (t.hasAttribute("data-shift")) {
       S.setUser(t.getAttribute("data-shift"), { shiftId: t.value }).then(function () { toast("Shift changed"); }).catch(function (x) { toast(x.message); });
     } else if (t.id === "time-staff") {
@@ -2748,7 +2770,7 @@
     route();
     S.init().then(function () {
       S.onAuth(function (user) {
-        var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role || st.user.active !== user.active;
+        var roleChanged = !st.user || !user || st.user.uid !== user.uid || st.user.role !== user.role || st.user.active !== user.active || st.user.fuel !== user.fuel;
         st.user = user;
         st.ready = true;
         if (roleChanged) subscribe();
