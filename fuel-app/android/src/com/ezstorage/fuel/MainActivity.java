@@ -19,6 +19,8 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
+import android.content.pm.PackageManager;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
@@ -47,6 +49,9 @@ public class MainActivity extends Activity {
     static final String HOST = "appassets.androidplatform.net";
     static final String START = "https://" + HOST + "/web/index.html";
     private static final int REQ_FILE = 1;
+    private static final int REQ_LOCATION = 2;
+    private String geoOrigin;
+    private GeolocationPermissions.Callback geoCallback;
 
     private WebView web;
     private ValueCallback<Uri[]> pendingFiles;
@@ -103,6 +108,7 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(false);
         s.setSupportZoom(false);
         s.setMediaPlaybackRequiresUserGesture(true);
+        s.setGeolocationEnabled(true);
         s.setUserAgentString(s.getUserAgentString() + " EZFuelAndroid/1");
 
         web.addJavascriptInterface(new Bridge(), "EZAndroid");
@@ -155,6 +161,19 @@ public class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
+            /** Location for clock in / out: ask Android for permission the first time. */
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback cb) {
+                if (Build.VERSION.SDK_INT < 23 || checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    cb.invoke(origin, true, false);
+                } else {
+                    geoOrigin = origin;
+                    geoCallback = cb;
+                    requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+                }
+            }
+
             @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
                 if (pendingFiles != null) pendingFiles.onReceiveValue(null);
@@ -245,6 +264,17 @@ public class MainActivity extends Activity {
         }
         pendingFiles.onReceiveValue(result);
         pendingFiles = null;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(req, perms, results);
+        if (req == REQ_LOCATION && geoCallback != null) {
+            boolean ok = false;
+            for (int r : results) if (r == PackageManager.PERMISSION_GRANTED) ok = true;
+            geoCallback.invoke(geoOrigin, ok, false);
+            geoCallback = null;
+        }
     }
 
     @Override

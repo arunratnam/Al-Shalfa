@@ -6,7 +6,7 @@ Read this first. It describes what is in this repository and how to build and up
 
 | Folder | What it is |
 |---|---|
-| `fuel-app/` | **EZ Fuel** – fuel expense claims for EZ Storage staff (main, in production) |
+| `fuel-app/` | **EZ Staff** (was EZ Fuel) – EZ Storage staff app: attendance, overtime, payroll, fuel bills and claims (main, in production) |
 | `android-app/` | **Always On Tasks** – Android floating checklist app |
 | `windows-app/` | Always On Tasks for Windows (C# WinForms, built with Mono) |
 | `aod.html` | Always-on-display web page |
@@ -52,6 +52,22 @@ Ask for them before building an Android update; without the same key, phones mus
 **Testing:** Playwright (Chromium) end-to-end scripts drove the claim flow, roles and security checks. Serve
 `fuel-app/web` with `python3 -m http.server` and test at phone size (Pixel 7) and desktop size.
 
+## Attendance, overtime and payroll (EZ Staff 2.0)
+
+- Staff clock in and out on the Home screen by tapping their warehouse (Ardiya, Shuaiba, Mina Abdulla, Open Yard), and
+  can switch warehouse during the day. GPS is saved and compared with the warehouse location set in Company settings.
+- `attendance/{id}`: one entry per stay at a warehouse (`inAt`/`outAt` ms plus `inServer`/`outServer` server timestamps).
+  The rules require the tap time to match the server clock (offline sync allowed up to 12 hours later, shown as "sent late").
+  Supervisors and above add or correct entries for others (`source: "supervisor"`), never their own.
+- OT per day = worked − shift length (whole day on the rest day, Friday, and on public holidays), rounded down to 15 minutes.
+  Stored in `ot/{uid}_{date}` as `pending`; supervisors, managers and the admin approve, change or reject it.
+- Payroll (managers and admin only): hourly wage = salary ÷ 26 ÷ 8, OT ×1.25, rest day ×1.5, holiday ×2 (editable in
+  `settings/company`). Salaries live in `pay/{uid}`, readable by managers and the admin, writable by the admin only.
+  Staff and supervisors never see KD for time.
+- Company settings (admin): warehouses with GPS location and radius, shifts (Morning 06:00–15:00, Day 08:00–18:00),
+  OT rules, public holidays. Each person's shift is set on the People page.
+
 ## Versions so far
 
-EZ Fuel 1.8 (roles), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).
+EZ Staff 2.0 (attendance, overtime, payroll; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+`com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).

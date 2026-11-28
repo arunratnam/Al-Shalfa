@@ -454,5 +454,56 @@
     return doc;
   }
 
-  window.EZPdf = { build: build, buildMonthly: buildMonthly, date: d, kd: kd };
+  // ------------------------------------------------------------------ payroll
+
+  /** data: { month, label, rows: payrollRows(), ot: rules, by: name } */
+  function buildPayroll(data, cfg) {
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
+    var o = data.ot;
+    doc.setProperties({ title: "Payroll " + data.label, author: cfg.companyName || "" });
+    if (window.EZ_LOGO) {
+      try { doc.addImage(window.EZ_LOGO, "PNG", 105 - 22, 9, 44, 44 * 134 / 308); } catch (e) {}
+    }
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.setTextColor(RED[0], RED[1], RED[2]);
+    doc.text("MONTHLY PAYROLL – SALARY & OVERTIME", 105, 34, { align: "center" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+    doc.setFontSize(11);
+    doc.text(data.label.toUpperCase(), 105, 40, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+    doc.text("Hourly wage = salary ÷ " + o.daysPerMonth + " ÷ " + o.hoursPerDay + "   ·   Overtime ×" + o.normal + ", rest day ×" + o.rest + ", public holiday ×" + o.holiday +
+      "   ·   approved overtime only", 105, 45.5, { align: "center" });
+    doc.setTextColor(INK[0], INK[1], INK[2]);
+
+    var y = 52;
+    section(doc, "STAFF", y);
+    y += 2;
+    var rows = data.rows.map(function (r, i) {
+      return [i + 1, r.name, r.employeeId, r.shift, kd(r.salary), r.salary ? r.hourly.toFixed(3) : "", (r.mins.normal / 60).toFixed(2), (r.mins.rest / 60).toFixed(2),
+        (r.mins.holiday / 60).toFixed(2), kd(r.otAmount), kd(r.total)];
+    });
+    var t = function (f) { return data.rows.reduce(function (a, r) { return a + f(r); }, 0); };
+    rows.push(["", "Total", "", "", kd(t(function (r) { return r.salary; })), "", (t(function (r) { return r.mins.normal; }) / 60).toFixed(2), (t(function (r) { return r.mins.rest; }) / 60).toFixed(2),
+      (t(function (r) { return r.mins.holiday; }) / 60).toFixed(2), kd(t(function (r) { return r.otAmount; })), kd(t(function (r) { return r.total; }))]);
+    y = table(doc, y, [["No.", 8], ["Name", 34, "left"], ["Emp. ID", 16], ["Shift", 15], ["Salary KD", 19, "right"], ["Hourly", 14, "right"], ["OT h", 12, "right"],
+      ["Rest h", 12, "right"], ["Hol. h", 12, "right"], ["OT KD", 18, "right"], ["Total KD", 22, "right"]], rows, { boldLast: true });
+
+    if (y + 30 > 280) { doc.addPage(); y = 20; } else { y += 16; }
+    doc.setFontSize(9.5);
+    [["Prepared by", data.by || ""], ["Approved by", ""], ["Date", ""]].forEach(function (f, i) {
+      var x = M + i * 62;
+      doc.text(f[0] + ":", x, y);
+      doc.setDrawColor(LINE[0], LINE[1], LINE[2]);
+      doc.line(x, y + 9, x + 54, y + 9);
+      if (f[1]) doc.text(f[1], x, y + 7);
+    });
+    footer(doc, { claimNo: "Payroll " + data.label });
+    return doc;
+  }
+
+  window.EZPdf = { build: build, buildMonthly: buildMonthly, buildPayroll: buildPayroll, date: d, kd: kd };
 })();

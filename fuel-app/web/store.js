@@ -412,6 +412,13 @@
       return JSON.parse(JSON.stringify(o));
     }
 
+    function clockError(e) {
+      if (e && e.code === "permission-denied") {
+        return new Error("Couldn't save the time. Check that your phone's date and time are set to automatic, then try again.");
+      }
+      return friendly(e);
+    }
+
     function list(snap) {
       return snap.docs.map(function (d) {
         var x = d.data();
@@ -658,6 +665,90 @@
         c.history.push({ status: c.status, action: action, byUid: current.uid, byName: current.name, at: now(), note: data.note || "" });
         delete c.id;
         return db.collection("claims").doc(id).set(c).then(function () { c.id = id; return c; }).catch(function (e) { throw friendly(e); });
+      },
+
+      // ---- company settings (warehouses, shifts, overtime rules, holidays) ----
+      watchSettings: function (cb) {
+        return db.collection("settings").doc("company").onSnapshot(function (snap) {
+          cb(snap.exists ? snap.data() : null);
+        }, function () { cb(null); });
+      },
+      saveSettings: function (data) {
+        return db.collection("settings").doc("company").set(clean(data)).catch(function (e) { throw friendly(e); });
+      },
+
+      // ---- salaries (admin and managers only) ----
+      watchPay: function (cb) {
+        return db.collection("pay").onSnapshot(function (snap) {
+          var m = {};
+          snap.docs.forEach(function (d) { m[d.id] = d.data(); });
+          cb(m);
+        }, function () { cb({}); });
+      },
+      setPay: function (uid, fields) {
+        fields.updatedAt = now();
+        fields.updatedBy = current.name;
+        return db.collection("pay").doc(uid).set(fields, { merge: true }).catch(function (e) { throw friendly(e); });
+      },
+
+      // ---- attendance: one entry per stay at a warehouse ----
+      watchAttendance: function (scope, fromDate, cb) {
+        var q = scope === "all" ? db.collection("attendance").where("date", ">=", fromDate)
+          : db.collection("attendance").where("ownerUid", "==", current.uid);
+        return q.onSnapshot(function (snap) { cb(list(snap)); }, function (e) { cb([], friendly(e)); });
+      },
+      /** Clock in now. The tap time is checked against Google's clock by the security rules. */
+      clockIn: function (warehouse, loc, date) {
+        var ref = db.collection("attendance").doc(), t = now();
+        return ref.set({
+          ownerUid: current.uid, staffName: current.name, date: date, warehouse: warehouse,
+          inAt: t, inServer: firebase.firestore.FieldValue.serverTimestamp(), inLoc: loc || null,
+          outAt: null, outLoc: null, source: "self", createdAt: t
+        }).then(function () { return ref.id; }).catch(function (e) { throw clockError(e); });
+      },
+      clockOut: function (id, loc) {
+        return db.collection("attendance").doc(id).update({
+          outAt: now(), outServer: firebase.firestore.FieldValue.serverTimestamp(), outLoc: loc || null, updatedAt: now()
+        }).catch(function (e) { throw clockError(e); });
+      },
+      /** Leave one warehouse and start at another in one step. */
+      switchWarehouse: function (openId, warehouse, loc, date) {
+        var batch = db.batch(), t = now(), ref = db.collection("attendance").doc();
+        var ts = firebase.firestore.FieldValue.serverTimestamp();
+        batch.update(db.collection("attendance").doc(openId), { outAt: t, outServer: ts, outLoc: loc || null, updatedAt: t });
+        batch.set(ref, { ownerUid: current.uid, staffName: current.name, date: date, warehouse: warehouse, inAt: t, inServer: ts,
+          inLoc: loc || null, outAt: null, outLoc: null, source: "self", createdAt: t });
+        return batch.commit().catch(function (e) { throw clockError(e); });
+      },
+      /** A supervisor adds or corrects an entry for someone else. */
+      saveAttendance: function (entry) {
+        var e = clean(entry), ref = e.id ? db.collection("attendance").doc(e.id) : db.collection("attendance").doc();
+        delete e.id;
+        if (!entry.id) { e.createdAt = now(); e.source = "supervisor"; }
+        e.editedBy = current.name;
+        e.editedAt = now();
+        return ref.set(e).then(function () { return ref.id; }).catch(function (x) { throw friendly(x); });
+      },
+      deleteAttendance: function (id) {
+        return db.collection("attendance").doc(id).delete().catch(function (e) { throw friendly(e); });
+      },
+
+      // ---- overtime per person per day ----
+      watchOt: function (scope, cb) {
+        var q = scope === "all" ? db.collection("ot") : db.collection("ot").where("ownerUid", "==", current.uid);
+        return q.onSnapshot(function (snap) { cb(list(snap)); }, function (e) { cb([], friendly(e)); });
+      },
+      /** Records the worked time and OT for a day (waiting for approval). */
+      saveOtDay: function (day) {
+        var id = day.ownerUid + "_" + day.date, d = clean(day);
+        d.updatedAt = now();
+        return db.collection("ot").doc(id).set(d).catch(function () { /* already decided: leave it */ });
+      },
+      decideOt: function (id, fields) {
+        fields.decidedBy = current.name;
+        fields.decidedByUid = current.uid;
+        fields.decidedAt = now();
+        return db.collection("ot").doc(id).update(fields).catch(function (e) { throw friendly(e); });
       },
 
       // ---- photos ----

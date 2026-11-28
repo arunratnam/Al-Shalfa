@@ -1,5 +1,5 @@
 rules_version = '2';
-// Security rules for the EZ Storage fuel app (online version).
+// Security rules for the EZ Staff app (EZ Storage): fuel bills and claims, attendance, overtime, payroll.
 // Roles: driver (staff) < supervisor (verifies) < manager (approves, pays) < admin (also allows people, sets roles).
 // New accounts wait until the admin allows them. Nobody can verify or approve their own claim.
 service cloud.firestore {
@@ -73,6 +73,59 @@ service cloud.firestore {
       allow create: if mine(request.resource.data) && request.resource.data.data is string
         && request.resource.data.data.size() < 1000000;
       allow delete: if mine(resource.data) || isAdmin();
+    }
+
+    // ---- company settings: warehouses, shifts, overtime rules, holidays ----
+    match /settings/{doc} {
+      allow read: if active();
+      allow write: if isAdmin();
+    }
+
+    // ---- salaries: only managers and the admin can see them, only the admin sets them ----
+    match /pay/{uid} {
+      allow read: if canApprove();
+      allow write: if isAdmin();
+    }
+
+    // ---- attendance: one entry per stay at a warehouse ----
+    match /attendance/{id} {
+      function ms(v) { return v is int || v is float; }
+      // the tap time must match Google's clock (up to 12 hours late when the phone had no signal)
+      function freshIn() {
+        return request.resource.data.inServer == request.time && ms(request.resource.data.inAt)
+          && request.resource.data.inAt <= request.time.toMillis() + 300000
+          && request.resource.data.inAt >= request.time.toMillis() - 43200000;
+      }
+      function freshOut() {
+        return request.resource.data.outServer == request.time && ms(request.resource.data.outAt)
+          && request.resource.data.outAt <= request.time.toMillis() + 300000
+          && request.resource.data.outAt >= request.time.toMillis() - 43200000
+          && request.resource.data.outAt > resource.data.inAt;
+      }
+      allow read: if mine(resource.data) || isOffice();
+      // staff clock themselves in; supervisors add entries for others (never for themselves)
+      allow create: if (mine(request.resource.data) && request.resource.data.source == 'self'
+                        && request.resource.data.outAt == null && freshIn())
+        || (isOffice() && request.resource.data.ownerUid != request.auth.uid && request.resource.data.source == 'supervisor');
+      // staff can only clock out of their own open entry; supervisors can correct other people's entries
+      allow update: if (mine(resource.data) && resource.data.source == 'self' && resource.data.outAt == null
+                        && changes().hasOnly(['outAt', 'outServer', 'outLoc', 'updatedAt']) && freshOut())
+        || (isOffice() && resource.data.ownerUid != request.auth.uid && request.resource.data.ownerUid == resource.data.ownerUid);
+      allow delete: if isOffice() && resource.data.ownerUid != request.auth.uid;
+    }
+
+    // ---- overtime per person per day ({uid}_{date}) ----
+    match /ot/{id} {
+      allow read: if mine(resource.data) || isOffice();
+      // staff record their own overtime as waiting; they can't approve it or change a decision
+      allow create: if (mine(request.resource.data) && id == request.auth.uid + '_' + request.resource.data.date
+                        && request.resource.data.status == 'pending' && !request.resource.data.keys().hasAny(['approvedMin', 'decidedBy', 'decidedByUid', 'decidedAt']))
+        || (isOffice() && request.resource.data.ownerUid != request.auth.uid);
+      allow update: if (mine(resource.data) && resource.data.status == 'pending' && request.resource.data.status == 'pending'
+                        && request.resource.data.ownerUid == request.auth.uid
+                        && !request.resource.data.keys().hasAny(['approvedMin', 'decidedBy', 'decidedByUid', 'decidedAt']))
+        || (isOffice() && resource.data.ownerUid != request.auth.uid && request.resource.data.ownerUid == resource.data.ownerUid);
+      allow delete: if isAdmin();
     }
 
     // ---- claim numbers ----

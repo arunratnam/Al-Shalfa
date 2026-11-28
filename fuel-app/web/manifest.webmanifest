@@ -1,7 +1,7 @@
 {
-  "name": "EZ Storage Fuel Claims",
-  "short_name": "EZ Fuel",
-  "description": "Submit fuel receipts, track approval and download claim PDFs.",
+  "name": "EZ Storage Staff",
+  "short_name": "EZ Staff",
+  "description": "Attendance, overtime, fuel bills and claims for EZ Storage staff.",
   "start_url": "./index.html#/home",
   "scope": "./",
   "display": "standalone",

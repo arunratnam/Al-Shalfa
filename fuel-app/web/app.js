@@ -9,7 +9,8 @@
   var st = {
     user: null, ready: false, mine: [], all: [], users: [], allError: null,
     unsub: [], filter: { status: "all", month: "all", driver: "all", q: "" }, officeTab: "queue",
-    draft: null, step: 1, photoCache: {}, loginTab: "in", bills: [], allBills: [], office: { driver: "all", month: "all" }
+    draft: null, step: 1, photoCache: {}, loginTab: "in", bills: [], allBills: [], office: { driver: "all", month: "all", timeStaff: "all" },
+    att: [], allAtt: [], ot: [], allOt: [], pay: {}, settings: null
   };
 
   // ------------------------------------------------------------------ helpers
@@ -101,6 +102,8 @@
     camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-3h6l2 3h3a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="4"/></svg>',
     pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
     whatsapp: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    money: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v5M18 9.5v5"/></svg>',
     share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg>'
   };
 
@@ -345,12 +348,16 @@
     var r = (location.hash || "#/home").split("/")[1] || "home";
     var items;
     if (isOffice()) {
-      items = [["home", "Dashboard", ICON.office], ["all-bills", "Bills", ICON.fuel], ["claims", "Claims", ICON.list],
-        ["reports", "Reports", ICON.pdf], ["mine", "My fuel", ICON.user]];
+      items = [["home", "Dashboard", ICON.office], ["time", "Time", ICON.clock], ["claims", "Fuel", ICON.fuel]];
+      if (canApprove()) items.push(["payroll", "Payroll", ICON.money]);
+      items.push(["mine", "Me", ICON.user]);
       if (isAdmin()) items.push(["users", "People", ICON.users]);
-    } else if (true) {
+    } else if (LOCAL) {
       items = [["home", "Home", ICON.home], ["bills", "Bills", ICON.fuel], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
         ["claims", "Claims", ICON.list], ["reports", "Monthly", ICON.office]];
+    } else if (true) {
+      items = [["home", "Home", ICON.home], ["time", "My time", ICON.clock], ["add", "Add bill", '<span class="plus">' + ICON.plus + "</span>"],
+        ["bills", "Bills", ICON.fuel], ["claims", "Claims", ICON.list]];
     } else {
       items = [["home", "Home", ICON.home], ["claims", "My claims", ICON.list], ["new", "New claim", '<span class="plus">' + ICON.plus + "</span>"]];
       if (isStaff()) items.push(["office", "Office", ICON.office]);
@@ -360,7 +367,9 @@
     $nav.innerHTML = items.map(function (it) {
       var on = r === it[0] || (it[0] === "claims" && r === "claim") || (it[0] === "office" && r === "review");
       if (it[0] === "claims" && r === "make-claim" && !isOffice()) on = true;
-      if (it[0] === "mine" && ["bills", "make-claim", "my-claims", "my-reports"].indexOf(r) >= 0) on = true;
+      if (it[0] === "mine" && ["bills", "make-claim", "my-claims", "my-reports", "my-time"].indexOf(r) >= 0) on = true;
+      if (it[0] === "claims" && isOffice() && ["all-bills", "reports", "review", "claim"].indexOf(r) >= 0) on = true;
+      if (it[0] === "users" && r === "settings") on = true;
       return '<a href="#/' + it[0] + '" class="' + (on ? "on " : "") + (it[0] === "new" || it[0] === "add" ? "new" : "") + '">' + it[2] + "<span>" + it[1] + "</span></a>";
     }).join("");
   }
@@ -373,7 +382,7 @@
     }
     top.hidden = false;
     top.innerHTML = '<img class="logo" src="img/logo.png" alt="EZ Storage">' +
-      '<div class="title"><b>Fuel Expenses</b><span>' + esc(st.user.name) + " · " + esc(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
+      '<div class="title"><b>EZ Staff</b><span>' + esc(st.user.name) + " · " + esc(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
       '<a class="avatar" href="#/profile" aria-label="Your profile">' + esc(initials(st.user.name)) + "</a>";
   }
 
@@ -487,7 +496,8 @@
     var cur = open.slice(0, need), m = mileageOf(cur);
     var curAmount = sum(cur, function (b) { return Number(b.amount) || 0; }), curLitres = sum(cur, function (b) { return Number(b.litres) || 0; });
     var last = mine.filter(function (c) { return c.status !== "draft"; }).sort(function (x, y) { return (y.submittedAt || 0) - (x.submittedAt || 0); })[0];
-    var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>" + uploadBanner();
+    var h = "<h1>Hello, " + esc(first) + '</h1><p class="sub">' + now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }) + "</p>" + uploadBanner() + attendanceCard();
+    if (!LOCAL) h += '<div class="section-title" style="margin-top:18px"><h2>Fuel</h2></div>';
 
     // the bills collected for the next claim, counted separately from claimed / paid bills
     var pct = Math.min(100, Math.round(n / need * 100));
@@ -1187,7 +1197,7 @@
     if (!isAdmin()) return '<div class="card empty"><b>Admin only</b></div>';
     var order = function (u) { return u.pending && u.active === false ? 0 : u.active === false ? 2 : 1; };
     var users = st.users.slice().sort(function (a, b) { return order(a) - order(b) || (a.name || "").localeCompare(b.name || ""); });
-    var h = '<h1>People</h1><p class="sub">Everyone who has created an account in the app. New accounts can\'t add bills until you allow them.</p><div class="card flush list">';
+    var h = '<div class="spread"><h1>People</h1><a class="btn small" href="#/settings">Company settings</a></div><p class="sub">Everyone who has created an account. New accounts can\'t use the app until you allow them. Choose each person\'s role and shift here.</p><div class="card flush list">';
     h += users.map(function (u) {
       var me = u.uid === st.user.uid, state = u.pending && u.active === false ? '<span class="status warn">Waiting to be allowed</span>'
         : u.active === false ? '<span class="status bad">Turned off</span>' : '<span class="status good">Allowed</span>';
@@ -1196,7 +1206,10 @@
       }).join("") + "</select>";
       var btn = me ? "" : u.pending && u.active === false ? '<button class="btn small good" data-act="allow-user" data-uid="' + esc(u.uid) + '">Allow</button>'
         : '<button class="link" data-act="toggle-active" data-uid="' + esc(u.uid) + '">' + (u.active === false ? "Turn on" : "Turn off") + "</button>";
-      btn = pick + btn;
+      var shiftPick = '<select aria-label="Shift for ' + esc(u.name) + '" data-shift="' + esc(u.uid) + '">' + tcfg().shifts.map(function (sh) {
+        return '<option value="' + esc(sh.id) + '"' + (shiftOf(u).id === sh.id ? " selected" : "") + ">" + esc(shiftLabel(sh)) + "</option>";
+      }).join("") + "</select>";
+      btn = pick + shiftPick + btn;
       return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + (me ? " (you)" : "") + "</b><span>" + esc(u.email || "") +
         " · " + esc(u.employeeId || "no ID") + " · " + esc(u.vehicle || "no vehicle") + '</span></div><div class="side">' + state + btn + "</div></div>";
     }).join("");
@@ -1605,6 +1618,12 @@
     var paidMonth = st.all.filter(function (c) { return c.status === "paid" && c.paidAt && monthOf(new Date(c.paidAt).toISOString()) === month; });
     var monthBills = billsWithMileage(st.allBills).filter(function (b) { return monthOf(b.date) === month; });
     var h = "<h1>" + esc(S.ROLE_LABELS[role()] || "Office") + ' dashboard</h1><p class="sub">Live from everyone using the app · ' + esc(monthLabel(month)) + "</p>";
+    var inNow = st.allAtt.filter(function (e) { return !e.outAt; }), otWait = st.allOt.filter(function (o) { return o.status === "pending" && o.ownerUid !== st.user.uid; });
+    h += '<div class="kpis" style="margin-bottom:10px">' + kpi("At work now", inNow.length, "", tcfg().warehouses.map(function (w) {
+      return w.name + " " + inNow.filter(function (e) { return e.warehouse === w.id; }).length; }).join(" · ")) +
+      kpi("Overtime to approve", otWait.length, "", hm(sum(otWait, function (o) { return o.otMin; })), otWait.length > 0) + "</div>" +
+      '<div class="btn-row" style="margin-bottom:6px"><a class="btn" href="#/time/now">' + ICON.clock + 'Who\'s in</a><a class="btn" href="#/time/ot">Approve overtime</a></div>' +
+      '<div class="section-title"><h2>Fuel</h2><a href="#/reports">Monthly reports</a></div>';
     if (pending.length) {
       h += '<div class="card stack" style="margin-bottom:14px;border-left:4px solid var(--warn)"><div class="spread"><h2>' + plural(pending.length, "person") .replace("persons", "people") + " waiting to be allowed</h2></div>" +
         pending.map(function (u) {
@@ -1755,6 +1774,535 @@
       .catch(function (e) { btn.disabled = false; btn.textContent = "Upload now"; toast(e.message); });
   }
 
+  // ------------------------------------------------------------------ attendance & overtime (online only)
+
+  var TIME_DEFAULTS = {
+    warehouses: [{ id: "ardiya", name: "Ardiya" }, { id: "shuaiba", name: "Shuaiba" }, { id: "mina", name: "Mina Abdulla" }, { id: "yard", name: "Open Yard" }],
+    shifts: [{ id: "morning", name: "Morning", start: "06:00", end: "15:00" }, { id: "day", name: "Day", start: "08:00", end: "18:00" }],
+    ot: { daysPerMonth: 26, hoursPerDay: 8, normal: 1.25, rest: 1.5, holiday: 2, restDay: 5, roundMin: 15 },
+    holidays: []
+  };
+
+  function tcfg() {
+    var s = st.settings || {}, d = TIME_DEFAULTS;
+    var ot = {};
+    for (var k in d.ot) ot[k] = s.ot && s.ot[k] !== undefined && s.ot[k] !== "" ? Number(s.ot[k]) : d.ot[k];
+    return { warehouses: s.warehouses && s.warehouses.length ? s.warehouses : d.warehouses, shifts: s.shifts && s.shifts.length ? s.shifts : d.shifts,
+      ot: ot, holidays: s.holidays || [] };
+  }
+  function hm(min) {
+    min = Math.max(0, Math.round(min || 0));
+    var h = Math.floor(min / 60), m = min % 60;
+    return h ? h + "h " + ("0" + m).slice(-2) + "m" : m + "m";
+  }
+  function hours(min) { return (Math.round((min || 0) / 60 * 100) / 100).toFixed(2); }
+  function clock(ms) { return ms ? new Date(ms).toTimeString().slice(0, 5) : "--:--"; }
+  function dateOf(ms) { var d = new Date(ms); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+  function minsOf(hhmm) { var p = String(hhmm || "0:0").split(":"); return Number(p[0]) * 60 + Number(p[1] || 0); }
+  function whName(id) { var w = tcfg().warehouses.filter(function (x) { return x.id === id; })[0]; return w ? w.name : id || "—"; }
+  function userById(uid) { return uid === st.user.uid ? st.user : st.users.filter(function (u) { return u.uid === uid; })[0] || { uid: uid, name: "" }; }
+  function shiftOf(u) { var sh = tcfg().shifts; return sh.filter(function (x) { return x.id === (u && u.shiftId); })[0] || sh[0]; }
+  function shiftMin(sh) { var m = minsOf(sh.end) - minsOf(sh.start); return m <= 0 ? m + 1440 : m; }
+  function shiftLabel(sh) { return sh.name + " " + sh.start + "–" + sh.end; }
+  function dayType(date) {
+    var c = tcfg();
+    if (c.holidays.some(function (h) { return h.date === date; })) return "holiday";
+    return new Date(date + "T12:00:00").getDay() === Number(c.ot.restDay) ? "rest" : "normal";
+  }
+  var DAY_LABEL = { normal: "", rest: "Friday / rest day", holiday: "Public holiday" };
+  function holidayName(date) { var h = tcfg().holidays.filter(function (x) { return x.date === date; })[0]; return h ? h.name : ""; }
+
+  /** Worked minutes and overtime for one person on one day. OT = time beyond the shift length; on rest days and holidays all of it. */
+  function dayCalc(entries, u, date, closedOnly) {
+    var t = Date.now(), worked = 0;
+    entries.forEach(function (e) {
+      if (e.date !== date || (closedOnly && !e.outAt)) return;
+      worked += Math.max(0, ((e.outAt || t) - e.inAt) / 60000);
+    });
+    worked = Math.round(worked);
+    var sh = shiftOf(u), sched = shiftMin(sh), type = dayType(date), round = Math.max(1, tcfg().ot.roundMin);
+    var raw = type === "normal" ? Math.max(0, worked - sched) : worked;
+    return { worked: worked, scheduled: type === "normal" ? sched : 0, ot: Math.floor(raw / round) * round, type: type, shift: shiftLabel(sh) };
+  }
+
+  function openEntry(entries, uid) {
+    return entries.filter(function (e) { return e.ownerUid === uid && !e.outAt; }).sort(function (a, b) { return b.inAt - a.inAt; })[0] || null;
+  }
+
+  function getLocation() {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) return res(null);
+      var done = false, timer = setTimeout(function () { if (!done) { done = true; res(null); } }, 9000);
+      navigator.geolocation.getCurrentPosition(function (p) {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        res({ lat: Math.round(p.coords.latitude * 1e6) / 1e6, lng: Math.round(p.coords.longitude * 1e6) / 1e6, acc: Math.round(p.coords.accuracy) });
+      }, function () { if (!done) { done = true; clearTimeout(timer); res(null); } }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+    });
+  }
+  function distM(a, b) {
+    var R = 6371000, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
+  }
+  /** "at Ardiya (80 m)", "2.4 km from Ardiya", or "no location". */
+  function locNote(whId, loc) {
+    if (!loc) return { text: "No location", warn: true };
+    var w = tcfg().warehouses.filter(function (x) { return x.id === whId; })[0];
+    if (!w || !w.lat) return { text: "Location saved", warn: false };
+    var d = distM(loc, w), radius = Number(w.radius) || 300;
+    return d <= radius ? { text: "At site (" + d + " m)", warn: false } : { text: (d >= 1000 ? (d / 1000).toFixed(1) + " km" : d + " m") + " from " + w.name, warn: true };
+  }
+  function lateSync(e, which) {
+    var srv = e[which + "Server"], t = e[which + "At"];
+    var ms = srv && srv.toMillis ? srv.toMillis() : srv && srv.seconds ? srv.seconds * 1000 : null;
+    return ms && t && ms - t > 10 * 60000;
+  }
+
+  /** Saves the day's worked time and OT so a supervisor can approve it. */
+  function syncOtDay(uid, date, entries) {
+    var u = userById(uid), c = dayCalc(entries.filter(function (e) { return e.ownerUid === uid; }), u, date, true);
+    var pool = uid === st.user.uid ? st.ot : st.allOt;
+    var ex = pool.filter(function (o) { return o.id === uid + "_" + date; })[0];
+    if (ex && ex.workedMin === c.worked && ex.otMin === c.ot && ex.dayType === c.type) return Promise.resolve();
+    if (!ex && c.ot <= 0) return Promise.resolve();
+    if (ex && ex.status !== "pending" && uid === st.user.uid) return Promise.resolve();
+    var doc = { ownerUid: uid, staffName: u.name || "", date: date, workedMin: c.worked, scheduledMin: c.scheduled, otMin: c.ot,
+      dayType: c.type, shift: c.shift, status: "pending" };
+    if (ex && ex.status !== "pending") doc.note = "Hours changed after the decision; please check again.";
+    return S.saveOtDay(doc);
+  }
+
+  // ---- staff: clock in / out card ----
+
+  function attendanceCard() {
+    if (LOCAL) return "";
+    var c = tcfg(), sh = shiftOf(st.user), open = openEntry(st.att, st.user.uid), td = today();
+    var dc = dayCalc(st.att, st.user, td, false), type = dayType(td);
+    var h = '<div class="card stack att-card' + (open ? " on" : "") + '"><div class="spread"><div><div class="eyebrow">Attendance · ' + esc(shiftLabel(sh)) + "</div>";
+    if (open) {
+      h += '<div class="att-where">At <b>' + esc(whName(open.warehouse)) + '</b> since ' + clock(open.inAt) + "</div></div>" +
+        '<span class="status good">Clocked in</span></div>' +
+        '<div class="mini"><div><span>Today</span><b data-tick-day="' + td + '">' + hm(dc.worked) + "</b></div><div><span>Shift</span><b>" + hm(shiftMin(sh)) + "</b></div>" +
+        "<div><span>Overtime</span><b>" + (dc.ot ? hm(dc.ot) : "—") + "</b></div></div>" +
+        (type !== "normal" ? '<div class="banner warn">' + esc(holidayName(td) || DAY_LABEL[type]) + ": all hours today count as overtime.</div>" : "") +
+        '<div class="btn-row"><button class="btn" data-act="att-switch">Switch warehouse</button><button class="btn bad" data-act="att-out">Clock out</button></div>';
+    } else {
+      h += '<div class="att-where">' + (dc.worked ? "Clocked out · worked " + hm(dc.worked) + " today" : "Not clocked in") + "</div></div>" +
+        '<span class="status muted">Off</span></div><div class="sub" style="margin:0;font-size:13px">Tap where you are working to clock in:</div>' +
+        '<div class="wh-grid">' + c.warehouses.map(function (w) {
+          return '<button class="wh-btn" data-act="att-in" data-wh="' + esc(w.id) + '"><b>' + esc(w.name) + "</b><span>Clock in</span></button>";
+        }).join("") + "</div>";
+    }
+    return h + '<a class="link" href="' + myHref("time") + '" style="text-align:left">My time and overtime →</a></div>';
+  }
+
+  function attIn(wh, btn) {
+    btn.disabled = true;
+    toast("Getting your location…");
+    getLocation().then(function (loc) {
+      return S.clockIn(wh, loc, today()).then(function () {
+        toast("Clocked in at " + whName(wh) + (loc ? "" : " (no location: allow location for EZ Staff)"));
+      });
+    }).catch(function (e) { btn.disabled = false; toast(e.message); });
+  }
+
+  function attOut() {
+    var open = openEntry(st.att, st.user.uid);
+    if (!open) return;
+    sheet("<h2>Clock out?</h2><p class=\"sub\">You're at " + esc(whName(open.warehouse)) + " since " + clock(open.inAt) + " (" + hm((Date.now() - open.inAt) / 60000) + ").</p>" +
+      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn bad" id="o-go">Clock out</button></div>', function (el, close) {
+      el.querySelector("#o-go").onclick = function () {
+        this.disabled = true;
+        getLocation().then(function (loc) {
+          return S.clockOut(open.id, loc).then(function () {
+            close();
+            toast("Clocked out");
+            var copy = st.att.map(function (e) { return e.id === open.id ? Object.assign({}, e, { outAt: Date.now() }) : e; });
+            syncOtDay(st.user.uid, open.date, copy);
+          });
+        }).catch(function (e) { toast(e.message); });
+      };
+    });
+  }
+
+  function attSwitch() {
+    var open = openEntry(st.att, st.user.uid);
+    if (!open) return;
+    sheet("<h2>Switch warehouse</h2><p class=\"sub\">Leaving " + esc(whName(open.warehouse)) + '. Where are you now?</p><div class="wh-grid">' +
+      tcfg().warehouses.filter(function (w) { return w.id !== open.warehouse; }).map(function (w) {
+        return '<button class="wh-btn" data-to="' + esc(w.id) + '"><b>' + esc(w.name) + "</b><span>Move here</span></button>";
+      }).join("") + '</div><button class="btn block" data-close style="margin-top:12px">Cancel</button>', function (el, close) {
+      el.querySelectorAll("[data-to]").forEach(function (b) {
+        b.onclick = function () {
+          var to = b.getAttribute("data-to");
+          b.disabled = true;
+          getLocation().then(function (loc) { return S.switchWarehouse(open.id, to, loc, today()); })
+            .then(function () { close(); toast("Now at " + whName(to)); })
+            .catch(function (e) { toast(e.message); });
+        };
+      });
+    });
+  }
+
+  // ---- staff: my time ----
+
+  function monthChips(base, m, keys) {
+    return '<div class="chips" style="margin-bottom:14px">' + keys.map(function (k) {
+      return '<a class="chip' + (k === m ? " on" : "") + '" href="' + base + k + '">' + esc(monthLabel(k)) + "</a>";
+    }).join("") + "</div>";
+  }
+  function lastMonths(n) {
+    var out = [], d = new Date();
+    for (var i = 0; i < n; i++) { var x = new Date(d.getFullYear(), d.getMonth() - i, 1); out.push(x.getFullYear() + "-" + ("0" + (x.getMonth() + 1)).slice(-2)); }
+    return out;
+  }
+  function otChip(o) {
+    if (!o) return "";
+    if (o.status === "approved") return '<span class="status good">OT ' + hm(o.approvedMin) + " approved</span>";
+    if (o.status === "rejected") return '<span class="status bad">OT rejected</span>';
+    return '<span class="status warn">OT ' + hm(o.otMin) + " waiting</span>";
+  }
+
+  function viewMyTime(m) {
+    if (LOCAL) return '<div class="card empty"><b>Time tracking needs the online app</b></div>';
+    var keys = lastMonths(3);
+    if (!m || keys.indexOf(m) < 0) m = keys[0];
+    var entries = st.att.filter(function (e) { return monthOf(e.date) === m; });
+    var days = {};
+    entries.forEach(function (e) { (days[e.date] = days[e.date] || []).push(e); });
+    var ots = st.ot.filter(function (o) { return monthOf(o.date) === m; });
+    var worked = 0;
+    Object.keys(days).forEach(function (d) { worked += dayCalc(days[d], st.user, d, false).worked; });
+    var appr = sum(ots.filter(function (o) { return o.status === "approved"; }), function (o) { return o.approvedMin || 0; });
+    var wait = sum(ots.filter(function (o) { return o.status === "pending"; }), function (o) { return o.otMin || 0; });
+    var h = '<h1>My time</h1><p class="sub">' + esc(shiftLabel(shiftOf(st.user))) + "</p>" + monthChips(myHref("time") + "/", m, keys) +
+      '<div class="kpis">' + kpi("Days worked", Object.keys(days).length, "", "") + kpi("Hours worked", hm(worked), "", "") +
+      kpi("Overtime approved", hm(appr), "", "") + kpi("Overtime waiting", hm(wait), "", "", wait > 0) + "</div>";
+    var list = Object.keys(days).sort().reverse();
+    h += '<div class="section-title"><h2>Days</h2></div>';
+    if (!list.length) return h + '<div class="card empty"><b>No time recorded this month</b>Clock in on the Home screen when you start work.</div>';
+    h += '<div class="card flush">' + list.map(function (d) {
+      var c = dayCalc(days[d], st.user, d, false), o = ots.filter(function (x) { return x.date === d; })[0];
+      return '<div class="day-row"><div class="main"><b>' + esc(fmtDate(d)) + (c.type !== "normal" ? ' <span class="status info">' + esc(holidayName(d) || DAY_LABEL[c.type]) + "</span>" : "") + "</b>" +
+        days[d].sort(function (a, b) { return a.inAt - b.inAt; }).map(function (e) {
+          return "<span>" + esc(whName(e.warehouse)) + " · " + clock(e.inAt) + "–" + (e.outAt ? clock(e.outAt) : "now") + (e.source === "supervisor" || e.editedBy ? " · by " + esc(e.editedBy || "supervisor") : "") + "</span>";
+        }).join("") + '</div><div class="side"><b>' + hm(c.worked) + "</b>" + (o ? otChip(o) : c.ot ? '<span class="status muted">OT ' + hm(c.ot) + "</span>" : "") + "</div></div>";
+    }).join("") + "</div>";
+    return h;
+  }
+
+  // ---- office: time ----
+
+  function staffList() {
+    return st.users.filter(function (u) { return !u.pending && u.active !== false; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
+  }
+
+  function viewTimeOffice(tab, m) {
+    tab = tab || "now";
+    var tabs = [["now", "Who's in"], ["ot", "Overtime to approve"], ["entries", "Time entries"], ["sites", "Warehouses"]];
+    var h = '<div class="spread"><h1>Time</h1><button class="btn small primary" data-act="entry-add">+ Add entry</button></div><p class="sub">Live attendance from all warehouses · ' + esc(fmtDate(today())) + "</p>" +
+      '<div class="chips" style="margin-bottom:14px">' + tabs.map(function (t) {
+        var n = t[0] === "ot" ? st.allOt.filter(function (o) { return o.status === "pending" && o.ownerUid !== st.user.uid; }).length : 0;
+        return '<a class="chip' + (tab === t[0] ? " on" : "") + '" href="#/time/' + t[0] + '">' + t[1] + (n ? '<span class="n">' + n + "</span>" : "") + "</a>";
+      }).join("") + "</div>";
+    if (tab === "now") return h + timeNow();
+    if (tab === "ot") return h + timeOtQueue();
+    if (tab === "entries") return h + timeEntries(m);
+    return h + timeSites(m);
+  }
+
+  function timeNow() {
+    var td = today(), c = tcfg(), h = '<div class="sites">';
+    var open = st.allAtt.filter(function (e) { return !e.outAt; });
+    c.warehouses.forEach(function (w) {
+      var here = open.filter(function (e) { return e.warehouse === w.id; });
+      h += '<div class="card site"><div class="spread"><h2>' + esc(w.name) + '</h2><span class="status ' + (here.length ? "good" : "muted") + '">' + plural(here.length, "person").replace("persons", "people") + "</span></div>" +
+        (here.length ? here.map(function (e) {
+          var ln = locNote(e.warehouse, e.inLoc);
+          return '<div class="who"><div><b>' + esc(e.staffName) + "</b><span>since " + clock(e.inAt) + " · " + hm((Date.now() - e.inAt) / 60000) + (ln.warn ? ' · <em class="warnline">⚠ ' + esc(ln.text) + "</em>" : "") + "</span></div>" +
+            (e.ownerUid !== st.user.uid ? '<button class="btn small" data-act="entry-edit" data-id="' + esc(e.id) + '">Edit</button>' : "") + "</div>";
+        }).join("") : '<div class="sub" style="margin:6px 0 0;font-size:13px">Nobody clocked in</div>') + "</div>";
+    });
+    h += "</div>";
+    var seen = {};
+    st.allAtt.forEach(function (e) { if (e.date === td) seen[e.ownerUid] = 1; });
+    var absent = staffList().filter(function (u) { return !seen[u.uid]; });
+    h += '<div class="section-title"><h2>Not clocked in today</h2><span class="sub" style="margin:0">' + absent.length + "</span></div>";
+    h += absent.length ? '<div class="card flush list">' + absent.map(function (u) {
+      return '<div class="item"><span class="avatar">' + esc(initials(u.name)) + '</span><div class="main"><b>' + esc(u.name) + "</b><span>" + esc(shiftLabel(shiftOf(u))) + "</span></div>" +
+        (u.uid !== st.user.uid ? '<button class="btn small" data-act="entry-add" data-uid="' + esc(u.uid) + '">Add time</button>' : "") + "</div>";
+    }).join("") + "</div>" : '<div class="card empty"><b>Everyone has clocked in today</b></div>';
+    return h;
+  }
+
+  function timeOtQueue() {
+    var pend = st.allOt.filter(function (o) { return o.status === "pending" && o.ownerUid !== st.user.uid; }).sort(function (a, b) { return a.date.localeCompare(b.date); });
+    var done = st.allOt.filter(function (o) { return o.status !== "pending"; }).sort(function (a, b) { return (b.decidedAt || 0) - (a.decidedAt || 0); }).slice(0, 15);
+    var h = pend.length ? '<div class="card flush">' + pend.map(function (o) {
+      return '<div class="day-row"><div class="main"><b>' + esc(o.staffName) + " · " + esc(fmtDate(o.date)) + (o.dayType !== "normal" ? ' <span class="status info">' + esc(holidayName(o.date) || DAY_LABEL[o.dayType]) + "</span>" : "") + "</b>" +
+        "<span>Worked " + hm(o.workedMin) + (o.scheduledMin ? " · shift " + hm(o.scheduledMin) : "") + " · " + esc(o.shift || "") + "</span>" + (o.note ? '<span class="warnline">' + esc(o.note) + "</span>" : "") +
+        '<a class="link" href="#/time/entries/' + monthOf(o.date) + '" style="text-align:left;font-size:13px">See time entries</a></div>' +
+        '<div class="side"><b>OT ' + hm(o.otMin) + '</b><div class="row"><button class="btn small good" data-act="ot-ok" data-id="' + esc(o.id) + '">Approve</button>' +
+        '<button class="btn small" data-act="ot-change" data-id="' + esc(o.id) + '">Change</button><button class="btn small bad" data-act="ot-no" data-id="' + esc(o.id) + '">Reject</button></div></div></div>';
+    }).join("") + "</div>" : '<div class="card empty"><b>No overtime waiting</b>Overtime appears here when staff clock out after their shift.</div>';
+    if (done.length) {
+      h += '<div class="section-title"><h2>Recently decided</h2></div><div class="card flush">' + done.map(function (o) {
+        return '<div class="day-row"><div class="main"><b>' + esc(o.staffName) + " · " + esc(fmtDate(o.date)) + "</b><span>by " + esc(o.decidedBy || "") + (o.decisionNote ? " · " + esc(o.decisionNote) : "") + "</span></div>" +
+          '<div class="side">' + otChip(o) + "</div></div>";
+      }).join("") + "</div>";
+    }
+    return h;
+  }
+
+  function otDecide(id, kind) {
+    var o = st.allOt.filter(function (x) { return x.id === id; })[0];
+    if (!o) return;
+    if (kind === "ok") {
+      S.decideOt(id, { status: "approved", approvedMin: o.otMin, note: "" }).then(function () { toast("Overtime approved: " + hm(o.otMin)); }).catch(function (e) { toast(e.message); });
+      return;
+    }
+    var change = kind === "change";
+    sheet("<h2>" + (change ? "Change overtime" : "Reject overtime") + '</h2><p class="sub" style="margin-top:-6px">' + esc(o.staffName) + " · " + esc(fmtDate(o.date)) + " · asked " + hm(o.otMin) + '</p><div class="stack">' +
+      (change ? '<div class="grid2"><div class="field"><label for="ot-h">Hours</label><input id="ot-h" type="number" min="0" max="24" inputmode="numeric" value="' + Math.floor(o.otMin / 60) + '"></div>' +
+        '<div class="field"><label for="ot-m">Minutes</label><input id="ot-m" type="number" min="0" max="59" step="5" inputmode="numeric" value="' + (o.otMin % 60) + '"></div></div>' : "") +
+      '<div class="field"><label for="ot-note">Reason' + (change ? " (optional)" : "") + '</label><input id="ot-note" placeholder="e.g. break not deducted"></div>' +
+      '<div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn ' + (change ? "good" : "bad") + '" id="ot-go">' + (change ? "Approve this amount" : "Reject") + "</button></div></div>", function (el, close) {
+      el.querySelector("#ot-go").onclick = function () {
+        var note = el.querySelector("#ot-note").value.trim();
+        if (!change && !note) { toast("Please write the reason."); return; }
+        var f = change ? { status: "approved", approvedMin: (Number(el.querySelector("#ot-h").value) || 0) * 60 + (Number(el.querySelector("#ot-m").value) || 0), decisionNote: note }
+          : { status: "rejected", approvedMin: 0, decisionNote: note };
+        S.decideOt(id, f).then(function () { close(); toast(change ? "Overtime approved: " + hm(f.approvedMin) : "Overtime rejected"); }).catch(function (e) { toast(e.message); });
+      };
+    });
+  }
+
+  function timeEntries(m) {
+    var keys = lastMonths(2);
+    if (!m || keys.indexOf(m) < 0) m = keys[0];
+    var who = st.office.timeStaff || "all";
+    var list = st.allAtt.filter(function (e) { return monthOf(e.date) === m && (who === "all" || e.ownerUid === who); })
+      .sort(function (a, b) { return b.inAt - a.inAt; });
+    var h = monthChips("#/time/entries/", m, keys) + '<div class="spread" style="margin-bottom:10px"><select id="time-staff" aria-label="Staff"><option value="all">Everyone</option>' +
+      staffList().map(function (u) { return '<option value="' + esc(u.uid) + '"' + (who === u.uid ? " selected" : "") + ">" + esc(u.name) + "</option>"; }).join("") +
+      '</select><button class="btn small" data-act="att-csv" data-m="' + m + '">' + ICON.pdf + "Excel (CSV)</button></div>";
+    if (!list.length) return h + '<div class="card empty"><b>No time entries</b></div>';
+    return h + '<div class="card flush table-wrap"><table><thead><tr><th>Date</th><th>Staff</th><th>Warehouse</th><th>In</th><th>Out</th><th class="r">Hours</th><th>Check</th><th></th></tr></thead><tbody>' +
+      list.map(function (e) {
+        var li = locNote(e.warehouse, e.inLoc), flags = [];
+        if (e.source === "supervisor") flags.push("Added by " + (e.editedBy || "supervisor"));
+        else if (e.editedBy) flags.push("Edited by " + e.editedBy);
+        if (li.warn) flags.push("In: " + li.text);
+        if (e.outAt && e.source !== "supervisor") { var lo = locNote(e.warehouse, e.outLoc); if (lo.warn) flags.push("Out: " + lo.text); }
+        if (lateSync(e, "in") || lateSync(e, "out")) flags.push("Sent late (no signal?)");
+        return "<tr><td>" + esc(fmtDate(e.date)) + "</td><td>" + esc(e.staffName) + "</td><td>" + esc(whName(e.warehouse)) + "</td><td>" + clock(e.inAt) + "</td><td>" + (e.outAt ? clock(e.outAt) : '<span class="status good">in</span>') +
+          '</td><td class="r">' + hm(((e.outAt || Date.now()) - e.inAt) / 60000) + '</td><td style="white-space:normal;font-size:12.5px;color:' + (flags.length ? "var(--warn)" : "var(--muted)") + '">' + esc(flags.join(" · ") || "OK") + "</td><td>" +
+          (e.ownerUid !== st.user.uid ? '<button class="btn small" data-act="entry-edit" data-id="' + esc(e.id) + '">Edit</button>' : "") + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
+  function timeSites(m) {
+    var keys = lastMonths(2);
+    if (!m || keys.indexOf(m) < 0) m = keys[0];
+    var c = tcfg(), list = st.allAtt.filter(function (e) { return monthOf(e.date) === m; });
+    var by = {}, people = {};
+    list.forEach(function (e) {
+      var mins = ((e.outAt || Date.now()) - e.inAt) / 60000;
+      by[e.warehouse] = (by[e.warehouse] || 0) + mins;
+      (people[e.ownerUid] = people[e.ownerUid] || { name: e.staffName, w: {} }).w[e.warehouse] = (people[e.ownerUid].w[e.warehouse] || 0) + mins;
+    });
+    var h = monthChips("#/time/sites/", m, keys) + '<div class="kpis">' + c.warehouses.map(function (w) { return kpi(w.name, hm(by[w.id] || 0), "", "worked this month"); }).join("") + "</div>";
+    var rows = Object.keys(people).map(function (k) { return people[k]; }).sort(function (a, b) { return (a.name || "").localeCompare(b.name || ""); });
+    if (!rows.length) return h;
+    return h + '<div class="section-title"><h2>Hours per person and warehouse</h2></div><div class="card flush table-wrap"><table><thead><tr><th>Staff</th>' +
+      c.warehouses.map(function (w) { return '<th class="r">' + esc(w.name) + "</th>"; }).join("") + '<th class="r">Total</th></tr></thead><tbody>' +
+      rows.map(function (p) {
+        var tot = 0;
+        return "<tr><td>" + esc(p.name) + "</td>" + c.warehouses.map(function (w) { tot += p.w[w.id] || 0; return '<td class="r">' + (p.w[w.id] ? hours(p.w[w.id]) : "—") + "</td>"; }).join("") + '<td class="r"><b>' + hours(tot) + "</b></td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+
+  /** Supervisor adds or corrects a time entry (never their own). */
+  function entrySheet(id, uidPreset) {
+    var e = id ? st.allAtt.filter(function (x) { return x.id === id; })[0] : null;
+    var staff = staffList().filter(function (u) { return u.uid !== st.user.uid; });
+    if (!staff.length) { toast("There is nobody else to add time for yet."); return; }
+    var uid = e ? e.ownerUid : uidPreset || staff[0].uid, date = e ? e.date : today();
+    var h = "<h2>" + (e ? "Edit time entry" : "Add time entry") + '</h2><div class="stack">' +
+      '<div class="field"><label for="en-staff">Staff</label><select id="en-staff"' + (e ? " disabled" : "") + ">" + staff.map(function (u) {
+        return '<option value="' + esc(u.uid) + '"' + (u.uid === uid ? " selected" : "") + ">" + esc(u.name) + "</option>";
+      }).join("") + "</select></div>" +
+      '<div class="grid2"><div class="field"><label for="en-date">Date</label><input id="en-date" type="date" value="' + date + '" max="' + today() + '"></div>' +
+      '<div class="field"><label for="en-wh">Warehouse</label><select id="en-wh">' + tcfg().warehouses.map(function (w) {
+        return '<option value="' + esc(w.id) + '"' + (e && e.warehouse === w.id ? " selected" : "") + ">" + esc(w.name) + "</option>";
+      }).join("") + "</select></div></div>" +
+      '<div class="grid2"><div class="field"><label for="en-in">Clock in</label><input id="en-in" type="time" value="' + (e ? clock(e.inAt) : shiftOf(userById(uid)).start) + '"></div>' +
+      '<div class="field"><label for="en-out">Clock out</label><input id="en-out" type="time" value="' + (e && e.outAt ? clock(e.outAt) : e ? clock(Date.now()) : shiftOf(userById(uid)).end) + '"><span class="hint">Leave empty if still working.</span></div></div>' +
+      '<div class="field"><label for="en-note">Note</label><input id="en-note" value="' + esc(e && e.note || "") + '" placeholder="e.g. forgot to clock out"></div>' +
+      '<div class="btn-row">' + (e ? '<button class="btn bad" id="en-del">Delete</button>' : '<button class="btn" data-close>Cancel</button>') + '<button class="btn primary" id="en-save">Save</button></div></div>';
+    sheet(h, function (el, close) {
+      var del = el.querySelector("#en-del");
+      if (del) del.onclick = function () {
+        S.deleteAttendance(e.id).then(function () {
+          close(); toast("Entry deleted");
+          syncOtDay(e.ownerUid, e.date, st.allAtt.filter(function (x) { return x.id !== e.id; }));
+        }).catch(function (x) { toast(x.message); });
+      };
+      el.querySelector("#en-save").onclick = function () {
+        var u = userById(el.querySelector("#en-staff").value), d = el.querySelector("#en-date").value, tin = el.querySelector("#en-in").value, tout = el.querySelector("#en-out").value;
+        if (!d || !tin) { toast("Enter the date and the clock-in time."); return; }
+        var inAt = new Date(d + "T" + tin + ":00").getTime(), outAt = tout ? new Date(d + "T" + tout + ":00").getTime() : null;
+        if (outAt && outAt <= inAt) outAt += 86400000; // past midnight
+        if (outAt && outAt - inAt > 20 * 3600000) { toast("That is more than 20 hours. Check the times."); return; }
+        var entry = e ? JSON.parse(JSON.stringify(e)) : { ownerUid: u.uid, staffName: u.name, inLoc: null, outLoc: null };
+        entry.id = e ? e.id : undefined;
+        if (e && e.inServer) entry.inServer = e.inServer; // keep Google's original timestamps
+        if (e && e.outServer) entry.outServer = e.outServer;
+        entry.date = d;
+        entry.warehouse = el.querySelector("#en-wh").value;
+        entry.inAt = inAt;
+        entry.outAt = outAt;
+        entry.note = el.querySelector("#en-note").value.trim();
+        if (!e) delete entry.id;
+        this.disabled = true;
+        var btn = this;
+        var data = {};
+        for (var k in entry) if (k !== "inServer" && k !== "outServer") data[k] = entry[k];
+        if (e) data.id = e.id;
+        S.saveAttendance(data).then(function (newId) {
+          close(); toast("Time saved");
+          // the live list may already hold the new entry: count it once
+          var all = st.allAtt.filter(function (x) { return x.id !== newId && x.id !== (e && e.id); }).concat([Object.assign({}, data, { id: newId })]);
+          syncOtDay(u.uid, d, all);
+          if (e && e.date !== d) syncOtDay(u.uid, e.date, all);
+        }).catch(function (x) { btn.disabled = false; toast(x.message); });
+      };
+    });
+  }
+
+  function exportAttendanceCsv(m) {
+    var rows = [["Date", "Staff", "Employee ID", "Warehouse", "Clock in", "Clock out", "Hours", "In location", "Out location", "Source", "Edited by", "Note"]];
+    st.allAtt.filter(function (e) { return monthOf(e.date) === m; }).sort(function (a, b) { return a.inAt - b.inAt; }).forEach(function (e) {
+      var u = userById(e.ownerUid);
+      rows.push([e.date, e.staffName, u.employeeId || "", whName(e.warehouse), clock(e.inAt), e.outAt ? clock(e.outAt) : "", e.outAt ? hours((e.outAt - e.inAt) / 60000) : "",
+        e.inLoc ? e.inLoc.lat + " " + e.inLoc.lng : "", e.outLoc ? e.outLoc.lat + " " + e.outLoc.lng : "", e.source, e.editedBy || "", e.note || ""]);
+    });
+    saveFile(new Blob(["﻿" + rows.map(csvLine).join("\r\n")], { type: "text/csv" }), "Attendance " + monthLabel(m) + ".csv");
+  }
+
+  // ---- payroll (manager and admin) ----
+
+  function payrollRows(m) {
+    var c = tcfg().ot;
+    return staffList().map(function (u) {
+      var pay = st.pay[u.uid] || {}, salary = Number(pay.salary) || 0, hourly = salary / c.daysPerMonth / c.hoursPerDay;
+      var ots = st.allOt.filter(function (o) { return o.ownerUid === u.uid && monthOf(o.date) === m && o.status === "approved"; });
+      var mins = { normal: 0, rest: 0, holiday: 0 };
+      ots.forEach(function (o) { mins[o.dayType || "normal"] += o.approvedMin || 0; });
+      var pend = sum(st.allOt.filter(function (o) { return o.ownerUid === u.uid && monthOf(o.date) === m && o.status === "pending"; }), function (o) { return o.otMin || 0; });
+      var amount = (mins.normal / 60) * hourly * c.normal + (mins.rest / 60) * hourly * c.rest + (mins.holiday / 60) * hourly * c.holiday;
+      amount = Math.round(amount * 1000) / 1000;
+      return { uid: u.uid, name: u.name, employeeId: u.employeeId || "", shift: shiftOf(u).name, salary: salary, hourly: hourly, mins: mins, pending: pend,
+        otAmount: amount, total: Math.round((salary + amount) * 1000) / 1000 };
+    });
+  }
+
+  function viewPayroll(m) {
+    if (!canApprove()) return '<div class="card empty"><b>Managers and admin only</b></div>';
+    var keys = lastMonths(3);
+    if (!m || keys.indexOf(m) < 0) m = keys[0];
+    var rows = payrollRows(m), c = tcfg().ot;
+    var tot = { salary: sum(rows, function (r) { return r.salary; }), ot: sum(rows, function (r) { return r.otAmount; }), total: sum(rows, function (r) { return r.total; }) };
+    var noSalary = rows.filter(function (r) { return !r.salary; }).length, pend = sum(rows, function (r) { return r.pending; });
+    var h = '<h1>Payroll</h1><p class="sub">Salary + approved overtime · hourly wage = salary ÷ ' + c.daysPerMonth + " ÷ " + c.hoursPerDay + " · OT ×" + c.normal + ", Friday ×" + c.rest + ", holiday ×" + c.holiday + "</p>" +
+      monthChips("#/payroll/", m, keys) +
+      '<div class="kpis">' + kpi("Salaries", kd(tot.salary), "KD", plural(rows.length, "person").replace("persons", "people")) + kpi("Overtime", kd(tot.ot), "KD", "approved only") +
+      kpi("Total to pay", kd(tot.total), "KD", "", true) + kpi("OT waiting", hm(pend), "", "not included yet", pend > 0) + "</div>";
+    if (noSalary && isAdmin()) h += '<div class="banner warn" style="margin-top:12px">' + plural(noSalary, "person").replace("persons", "people") + " without a salary. Tap <b>Set salary</b> in the table.</div>";
+    h += '<div class="btn-row" style="margin:14px 0"><button class="btn" data-act="pay-pdf" data-m="' + m + '">' + ICON.pdf + 'Payroll PDF</button><button class="btn" data-act="pay-csv" data-m="' + m + '">' + ICON.pdf + "Excel (CSV)</button></div>";
+    h += '<div class="card flush table-wrap"><table><thead><tr><th>Staff</th><th>Shift</th><th class="r">Salary KD</th><th class="r">Hourly KD</th><th class="r">OT h</th><th class="r">Friday h</th><th class="r">Holiday h</th><th class="r">OT KD</th><th class="r">Total KD</th><th></th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return "<tr><td><b>" + esc(r.name) + "</b>" + (r.pending ? '<br><span class="warnline">' + hm(r.pending) + " OT waiting</span>" : "") + "</td><td>" + esc(r.shift) + '</td><td class="r">' + (r.salary ? kd(r.salary) : "—") + '</td><td class="r">' + (r.salary ? r.hourly.toFixed(3) : "—") +
+          '</td><td class="r">' + hours(r.mins.normal) + '</td><td class="r">' + hours(r.mins.rest) + '</td><td class="r">' + hours(r.mins.holiday) + '</td><td class="r">' + kd(r.otAmount) + '</td><td class="r"><b>' + kd(r.total) + "</b></td><td>" +
+          (isAdmin() ? '<button class="btn small" data-act="pay-set" data-uid="' + esc(r.uid) + '">Set salary</button>' : "") + "</td></tr>";
+      }).join("") + '<tr class="tot"><td><b>Total</b></td><td></td><td class="r"><b>' + kd(tot.salary) + '</b></td><td></td><td class="r">' + hours(sum(rows, function (r) { return r.mins.normal; })) + '</td><td class="r">' + hours(sum(rows, function (r) { return r.mins.rest; })) +
+      '</td><td class="r">' + hours(sum(rows, function (r) { return r.mins.holiday; })) + '</td><td class="r"><b>' + kd(tot.ot) + '</b></td><td class="r"><b>' + kd(tot.total) + "</b></td><td></td></tr></tbody></table></div>";
+    return h;
+  }
+
+  function salarySheet(uid) {
+    var u = userById(uid), cur = (st.pay[uid] || {}).salary || "";
+    sheet("<h2>Salary · " + esc(u.name) + '</h2><div class="stack"><div class="field"><label for="sal">Monthly salary (KD)</label><input id="sal" type="number" min="0" step="0.001" inputmode="decimal" value="' + esc(cur) + '">' +
+      '<span class="hint">Only managers and the admin can see this.</span></div><div class="btn-row"><button class="btn" data-close>Cancel</button><button class="btn primary" id="sal-go">Save</button></div></div>', function (el, close) {
+      el.querySelector("#sal-go").onclick = function () {
+        var v = parseFloat(el.querySelector("#sal").value);
+        if (isNaN(v) || v < 0) { toast("Enter the salary in KD."); return; }
+        S.setPay(uid, { salary: Math.round(v * 1000) / 1000, name: u.name }).then(function () { close(); toast("Salary saved"); }).catch(function (e) { toast(e.message); });
+      };
+    });
+  }
+
+  function exportPayrollCsv(m) {
+    var c = tcfg().ot, rows = [["Month", "Staff", "Employee ID", "Shift", "Salary (KD)", "Hourly (KD)", "OT hours ×" + c.normal, "Friday hours ×" + c.rest, "Holiday hours ×" + c.holiday, "OT amount (KD)", "Total (KD)", "OT waiting (hours)"]];
+    payrollRows(m).forEach(function (r) {
+      rows.push([monthLabel(m), r.name, r.employeeId, r.shift, kd(r.salary), r.hourly.toFixed(3), hours(r.mins.normal), hours(r.mins.rest), hours(r.mins.holiday), kd(r.otAmount), kd(r.total), hours(r.pending)]);
+    });
+    saveFile(new Blob(["﻿" + rows.map(csvLine).join("\r\n")], { type: "text/csv" }), "Payroll " + monthLabel(m) + ".csv");
+  }
+
+  // ---- company settings (admin) ----
+
+  function viewSettings() {
+    if (!isAdmin()) return '<div class="card empty"><b>Admin only</b></div>';
+    var c = tcfg();
+    var h = '<h1>Company settings</h1><p class="sub">Warehouses, shifts, overtime rules and public holidays.</p><form id="settings-form" class="stack">' +
+      '<div class="card stack"><div class="eyebrow">Warehouses</div><p class="sub" style="margin:0;font-size:13px">Stand at the warehouse and tap <b>Use my location here</b>, so the app can show if someone clocks in far away.</p>' +
+      c.warehouses.map(function (w, i) {
+        return '<div class="set-row" data-wh="' + i + '"><input aria-label="Warehouse name" data-k="name" value="' + esc(w.name) + '"><input aria-label="Allowed distance in metres" data-k="radius" type="number" min="50" step="50" value="' + esc(w.radius || 300) + '" title="Allowed distance (m)">' +
+          '<button type="button" class="btn small" data-act="wh-here" data-i="' + i + '">' + (w.lat ? "📍 Set ✓" : "Use my location here") + "</button></div>";
+      }).join("") + "</div>" +
+      '<div class="card stack"><div class="eyebrow">Shifts</div>' + c.shifts.map(function (sh, i) {
+        return '<div class="set-row" data-sh="' + i + '"><input aria-label="Shift name" data-k="name" value="' + esc(sh.name) + '"><input aria-label="Start" type="time" data-k="start" value="' + esc(sh.start) + '"><input aria-label="End" type="time" data-k="end" value="' + esc(sh.end) + '">' +
+          (c.shifts.length > 1 ? '<button type="button" class="btn small bad" data-act="sh-del" data-i="' + i + '">Remove</button>' : "") + "</div>";
+      }).join("") + '<button type="button" class="btn small" data-act="sh-add">+ Add shift</button><p class="sub" style="margin:0;font-size:12.5px">Choose each person\'s shift on the People page.</p></div>' +
+      '<div class="card stack"><div class="eyebrow">Overtime rules (Kuwait Labour Law)</div><div class="grid3">' +
+      [["daysPerMonth", "Days per month"], ["hoursPerDay", "Hours per day"], ["roundMin", "Count OT in blocks of (min)"], ["normal", "Normal day ×"], ["rest", "Rest day ×"], ["holiday", "Public holiday ×"]].map(function (f) {
+        return '<div class="field"><label for="ot-' + f[0] + '">' + f[1] + '</label><input id="ot-' + f[0] + '" data-ot="' + f[0] + '" type="number" step="0.01" min="0" value="' + c.ot[f[0]] + '"></div>';
+      }).join("") + '</div><div class="field"><label for="ot-restDay">Weekly rest day</label><select id="ot-restDay" data-ot="restDay">' +
+      ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map(function (d, i) { return '<option value="' + i + '"' + (Number(c.ot.restDay) === i ? " selected" : "") + ">" + d + "</option>"; }).join("") + "</select></div>" +
+      '<p class="sub" style="margin:0;font-size:12.5px">Hourly wage = salary ÷ days per month ÷ hours per day. On the rest day and public holidays every hour worked is overtime.</p></div>' +
+      '<div class="card stack"><div class="eyebrow">Public holidays</div>' + (c.holidays.length ? c.holidays.slice().sort(function (a, b) { return a.date.localeCompare(b.date); }).map(function (x) {
+        return '<div class="spread"><span><b>' + esc(fmtDate(x.date)) + "</b> · " + esc(x.name) + '</span><button type="button" class="link" data-act="hol-del" data-d="' + esc(x.date) + '">Remove</button></div>';
+      }).join("") : '<span class="sub" style="margin:0">None yet</span>') +
+      '<div class="set-row"><input id="hol-date" type="date" aria-label="Holiday date"><input id="hol-name" placeholder="e.g. National Day" aria-label="Holiday name"><button type="button" class="btn small" data-act="hol-add">Add</button></div></div>' +
+      '<div class="sticky-actions"><a class="btn" href="#/users">Back</a><button class="btn primary" type="submit">Save settings</button></div></form>';
+    return h;
+  }
+
+  /** Reads the settings form into a settings object (keeping warehouse locations). */
+  function readSettings() {
+    var c = JSON.parse(JSON.stringify(tcfg())), f = document.getElementById("settings-form");
+    if (!f) return c;
+    f.querySelectorAll("[data-wh]").forEach(function (row) {
+      var w = c.warehouses[Number(row.getAttribute("data-wh"))];
+      w.name = row.querySelector('[data-k="name"]').value.trim() || w.name;
+      w.radius = Number(row.querySelector('[data-k="radius"]').value) || 300;
+    });
+    f.querySelectorAll("[data-sh]").forEach(function (row) {
+      var sh = c.shifts[Number(row.getAttribute("data-sh"))];
+      sh.name = row.querySelector('[data-k="name"]').value.trim() || sh.name;
+      sh.start = row.querySelector('[data-k="start"]').value || sh.start;
+      sh.end = row.querySelector('[data-k="end"]').value || sh.end;
+    });
+    f.querySelectorAll("[data-ot]").forEach(function (i) { c.ot[i.getAttribute("data-ot")] = Number(i.value); });
+    return c;
+  }
+  function saveSettingsNow(c, msg) {
+    st.settings = c;
+    return S.saveSettings(c).then(function () { toast(msg || "Settings saved"); route(); }).catch(function (e) { toast(e.message); });
+  }
+
   // ------------------------------------------------------------------ router
 
   function route() {
@@ -1789,6 +2337,10 @@
       case "bills": html = viewBills(); break;
       case "add": html = viewBills(); break;
       case "mine": html = viewHomeLocal(); break;
+      case "time": html = isOffice() ? viewTimeOffice(id, parts[2]) : viewMyTime(id); break;
+      case "my-time": html = viewMyTime(id); break;
+      case "payroll": html = viewPayroll(id); break;
+      case "settings": html = viewSettings(); break;
       case "my-claims": html = viewClaims(); break;
       case "my-reports": html = viewReports(id); break;
       case "all-bills": html = viewAllBills(id); break;
@@ -1863,6 +2415,42 @@
       case "upload-local": uploadLocal(el); break;
       case "skip-upload": S.skipUpload(); route(); break;
       case "add-bill": billSheet(null); break;
+      case "att-in": attIn(el.getAttribute("data-wh"), el); break;
+      case "att-out": attOut(); break;
+      case "att-switch": attSwitch(); break;
+      case "entry-add": entrySheet(null, el.getAttribute("data-uid")); break;
+      case "entry-edit": entrySheet(el.getAttribute("data-id")); break;
+      case "ot-ok": otDecide(el.getAttribute("data-id"), "ok"); break;
+      case "ot-change": otDecide(el.getAttribute("data-id"), "change"); break;
+      case "ot-no": otDecide(el.getAttribute("data-id"), "no"); break;
+      case "att-csv": exportAttendanceCsv(el.getAttribute("data-m")); break;
+      case "pay-csv": exportPayrollCsv(el.getAttribute("data-m")); break;
+      case "pay-set": salarySheet(el.getAttribute("data-uid")); break;
+      case "pay-pdf":
+        var pm = el.getAttribute("data-m");
+        try {
+          saveFile(P.buildPayroll({ month: pm, label: monthLabel(pm), rows: payrollRows(pm), ot: tcfg().ot, by: st.user.name }, C).output("blob"), "Payroll " + monthLabel(pm) + ".pdf");
+        } catch (x) { toast("Couldn't make the PDF: " + x.message); }
+        break;
+      case "wh-here":
+        var wi = Number(el.getAttribute("data-i")), sc = readSettings();
+        el.disabled = true;
+        el.textContent = "Getting location…";
+        getLocation().then(function (loc) {
+          if (!loc) { el.disabled = false; el.textContent = "Use my location here"; toast("Couldn't get the location. Allow location for this app and try again."); return; }
+          sc.warehouses[wi].lat = loc.lat;
+          sc.warehouses[wi].lng = loc.lng;
+          saveSettingsNow(sc, sc.warehouses[wi].name + " location saved (±" + loc.acc + " m)");
+        });
+        break;
+      case "sh-add": var sa = readSettings(); sa.shifts.push({ id: "s" + Date.now().toString(36), name: "New shift", start: "07:00", end: "16:00" }); st.settings = sa; route(); break;
+      case "sh-del": var sd = readSettings(); sd.shifts.splice(Number(el.getAttribute("data-i")), 1); st.settings = sd; route(); break;
+      case "hol-add":
+        var hd = document.getElementById("hol-date").value, hn = document.getElementById("hol-name").value.trim();
+        if (!hd || !hn) { toast("Enter the holiday date and name."); break; }
+        var ha = readSettings(); ha.holidays = ha.holidays.filter(function (x) { return x.date !== hd; }).concat([{ date: hd, name: hn }]); st.settings = ha; route();
+        break;
+      case "hol-del": var hr = readSettings(), dd = el.getAttribute("data-d"); hr.holidays = hr.holidays.filter(function (x) { return x.date !== dd; }); st.settings = hr; route(); break;
       case "open-bill": billSheet(el.getAttribute("data-id")); break;
       case "create-claim": createClaim(); break;
       case "change-sig": signatureSheet(); break;
@@ -1933,6 +2521,11 @@
     var t = e.target;
     if (t.hasAttribute("data-role")) {
       S.setUser(t.getAttribute("data-role"), { role: t.value }).then(function () { toast("Role changed to " + (S.ROLE_LABELS[t.value] || t.value)); }).catch(function (x) { toast(x.message); });
+    } else if (t.hasAttribute("data-shift")) {
+      S.setUser(t.getAttribute("data-shift"), { shiftId: t.value }).then(function () { toast("Shift changed"); }).catch(function (x) { toast(x.message); });
+    } else if (t.id === "time-staff") {
+      st.office.timeStaff = t.value;
+      route();
     } else if (t.hasAttribute("data-filter") && t.tagName === "SELECT") {
       st.filter[t.getAttribute("data-filter")] = t.value;
       route();
@@ -1956,6 +2549,10 @@
   document.addEventListener("submit", function (e) {
     e.preventDefault();
     var f = e.target;
+    if (f.id === "settings-form") {
+      saveSettingsNow(readSettings());
+      return;
+    }
     if (f.id === "setup-form") {
       var sv = {};
       new FormData(f).forEach(function (val, k) { sv[k] = String(val).trim(); });
@@ -2006,13 +2603,27 @@
     st.mine = [];
     st.bills = [];
     st.allBills = [];
+    st.att = [];
+    st.allAtt = [];
+    st.ot = [];
+    st.allOt = [];
+    st.pay = {};
     st.all = [];
     st.users = [];
     if (!st.user) return;
     if (st.user.active === false) return; // waiting to be allowed
     st.unsub.push(S.watchClaims("mine", function (list) { st.mine = list; refresh(); }));
     st.unsub.push(S.watchBills(function (list) { st.bills = list; refresh(); }));
+    if (!LOCAL) {
+      st.unsub.push(S.watchSettings(function (x) { st.settings = x; refresh(); }));
+      st.unsub.push(S.watchAttendance("mine", null, function (list) { st.att = list; refresh(); }));
+      st.unsub.push(S.watchOt("mine", function (list) { st.ot = list; refresh(); }));
+    }
     if (isOffice()) {
+      var from = new Date(); from = new Date(from.getFullYear(), from.getMonth() - 1, 1);
+      st.unsub.push(S.watchAttendance("all", dateOf(from.getTime()), function (list) { st.allAtt = list; refresh(); }));
+      st.unsub.push(S.watchOt("all", function (list) { st.allOt = list; refresh(); }));
+      if (canApprove()) st.unsub.push(S.watchPay(function (m) { st.pay = m; refresh(); }));
       st.unsub.push(S.watchBills(function (list) { st.allBills = list; refresh(); }, "all"));
       st.unsub.push(S.watchClaims("all", function (list, err) { st.all = list; st.allError = err ? err.message : null; refresh(); }));
       st.unsub.push(S.watchUsers(function (list) { st.users = list; refresh(); }));
@@ -2023,10 +2634,15 @@
   function refresh() {
     // don't redraw while the person is filling in the claim form or a dialog is open
     var page = (location.hash || "").slice(2).split("/")[0];
-    if (page === "new" || page === "edit" || page === "make-claim" || document.querySelector(".scrim")) return;
+    if (page === "new" || page === "edit" || page === "make-claim" || page === "settings" || document.querySelector(".scrim")) return;
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(route, 60);
   }
+
+  setInterval(function () {
+    var page = (location.hash || "#/home").slice(2).split("/")[0] || "home";
+    if (st.user && ["home", "mine", "time", "my-time"].indexOf(page) >= 0 && (openEntry(st.att, st.user.uid) || st.allAtt.some(function (e) { return !e.outAt; }))) refresh();
+  }, 60000);
 
   function start() {
     $main = document.getElementById("main");
