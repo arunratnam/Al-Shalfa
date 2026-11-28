@@ -3186,7 +3186,7 @@
       st.unsub.push(S.watchOt("mine", function (list) { st.ot = list; refresh(); }));
     }
     if (isOffice()) {
-      var from = new Date(); from = new Date(from.getFullYear(), from.getMonth() - 1, 1);
+      var from = new Date(); from = new Date(from.getFullYear(), from.getMonth() - 2, 1); // the 3 months the Time and Payroll pages offer
       st.unsub.push(S.watchAttendance("all", dateOf(from.getTime()), function (list) { st.allAtt = list; refresh(); }));
       st.unsub.push(S.watchOt("all", function (list) { st.allOt = list; refresh(); }));
       if (isAdmin()) st.unsub.push(S.watchPay(function (m) { st.pay = m; refresh(); }));
