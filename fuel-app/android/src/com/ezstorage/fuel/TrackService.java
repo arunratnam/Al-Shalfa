@@ -113,7 +113,7 @@ public class TrackService extends Service implements LocationListener {
         Notification.Builder b;
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationChannel ch = new NotificationChannel(CHANNEL, "On duty location", NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("Shown while EZ Staff shares your location during work hours");
+            ch.setDescription("Shown while " + getString(R.string.app_name) + " shares your location during work hours");
             nm.createNotificationChannel(ch);
             b = new Notification.Builder(this, CHANNEL);
         } else {
@@ -122,7 +122,7 @@ public class TrackService extends Service implements LocationListener {
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         b.setContentTitle("On duty: sharing your location")
-                .setContentText("EZ Staff shares your location with the office until you clock out.")
+                .setContentText(getString(R.string.app_name) + " shares your location with the office until you clock out.")
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(pi)
                 .setOngoing(true);

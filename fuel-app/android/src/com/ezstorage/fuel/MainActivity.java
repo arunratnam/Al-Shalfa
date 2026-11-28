@@ -41,7 +41,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * Hosts the EZ Fuel web app (bundled in assets/web) in a WebView.
+ * Hosts the staff web app (bundled in assets/web) in a WebView.
  * The files are served from https://appassets.androidplatform.net/ so storage and sign-in work normally.
  */
 public class MainActivity extends Activity {
@@ -142,7 +142,7 @@ public class MainActivity extends Activity {
             public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail detail) {
                 runOnUiThread(new Runnable() {
                     public void run() {
-                        Toast.makeText(MainActivity.this, "EZ Fuel ran out of memory and restarted the screen. Your saved bills are safe.", Toast.LENGTH_LONG).show();
+                        Toast.makeText(MainActivity.this, getString(R.string.app_name) + " ran out of memory and restarted the screen. Your saved data is safe.", Toast.LENGTH_LONG).show();
                         recreate();
                     }
                 });
@@ -224,12 +224,12 @@ public class MainActivity extends Activity {
         f.delete();
         try {
             new AlertDialog.Builder(this)
-                    .setTitle("EZ Fuel closed unexpectedly")
+                    .setTitle(getString(R.string.app_name) + " closed unexpectedly")
                     .setMessage("Sorry about that. Your bills are safe. Send the error report so it can be fixed?")
                     .setPositiveButton("Send report", new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface d, int w) {
                             Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain")
-                                    .putExtra(Intent.EXTRA_SUBJECT, "EZ Fuel crash report")
+                                    .putExtra(Intent.EXTRA_SUBJECT, getString(R.string.app_name) + " crash report")
                                     .putExtra(Intent.EXTRA_TEXT, sb.toString());
                             startActivity(Intent.createChooser(send, "Send report"));
                         }
@@ -391,7 +391,7 @@ public class MainActivity extends Activity {
                     ContentValues v = new ContentValues();
                     v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
                     v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/EZ Fuel");
+                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/" + getString(R.string.app_name));
                     uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                     OutputStream os = getContentResolver().openOutputStream(uri);
                     os.write(bytes);

@@ -21,10 +21,13 @@ import java.io.IOException;
  */
 public class FilesProvider extends ContentProvider {
 
-    static final String AUTHORITY = "com.ezstorage.fuel.files";
+    /** "<application id>.files", so each company's app (white-label build) has its own. */
+    static String authority(Context c) {
+        return c.getPackageName() + ".files";
+    }
 
     public static Uri uri(Context c, String path) {
-        return Uri.parse("content://" + AUTHORITY + "/" + Uri.encode(path, "/"));
+        return Uri.parse("content://" + authority(c) + "/" + Uri.encode(path, "/"));
     }
 
     public static File file(Context c, Uri u) {

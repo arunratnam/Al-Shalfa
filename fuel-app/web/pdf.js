@@ -171,7 +171,7 @@
     // ---- header ----
     if (window.EZ_LOGO) {
       try {
-        doc.addImage(window.EZ_LOGO, "PNG", 105 - 25, 9, 50, 50 * 134 / 308);
+        doc.addImage(window.EZ_LOGO, "PNG", 105 - 25, 9, 50, 50 * (window.EZ_LOGO_RATIO || 134 / 308));
       } catch (e) {}
     }
     if (["approved", "paid", "returned", "rejected"].indexOf(claim.status) >= 0) stamp(doc, claim, labels);
@@ -371,7 +371,7 @@
     doc.setProperties({ title: "Monthly fuel report " + rep.label + " " + (profile.name || ""), author: cfg.companyName || "" });
 
     if (window.EZ_LOGO) {
-      try { doc.addImage(window.EZ_LOGO, "PNG", 105 - 25, 9, 50, 50 * 134 / 308); } catch (e) {}
+      try { doc.addImage(window.EZ_LOGO, "PNG", 105 - 25, 9, 50, 50 * (window.EZ_LOGO_RATIO || 134 / 308)); } catch (e) {}
     }
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);

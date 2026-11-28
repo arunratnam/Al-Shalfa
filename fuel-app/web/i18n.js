@@ -228,7 +228,7 @@
     "Allowed distance (metres)": "المسافة المسموحة (متر)", "Name": "الاسم", "Location": "الموقع", "Not set": "غير محدد",
     "Not set yet. You sign once, on your first claim.": "غير محدد بعد. توقّع مرة واحدة في أول مطالبة.", "Add signature": "إضافة توقيع",
     "iPhone:": "آيفون:", "Android:": "أندرويد:", "open this page in Safari → tap Share →": "افتح هذه الصفحة في Safari ← اضغط مشاركة ←",
-    "install the EZ Fuel app, or in Chrome tap ⋮ →": "ثبّت تطبيق EZ Staff، أو في Chrome اضغط ⋮ ←", "System": "تلقائي",
+    "install the EZ Staff app, or in Chrome tap ⋮ →": "ثبّت تطبيق EZ Staff، أو في Chrome اضغط ⋮ ←", "System": "تلقائي",
     "now": "الآن", "a day": "يومياً", "overtime after": "عمل إضافي بعد", "Ref.": "مرجع", "Example data": "بيانات تجريبية",
     "Salary": "الراتب", "Hourly": "أجر الساعة", "OT": "إضافي", "Holiday": "عطلة", "Rest day": "يوم الراحة",
     "Person": "الشخص", "Staff member": "الموظف", "All staff": "كل الموظفين", "hours": "ساعات", "days": "أيام",
@@ -310,9 +310,16 @@
     return isData(u) ? u : null;
   }
 
+  // the dictionary says "EZ Staff" / "EZ Storage"; other companies' builds swap in their own names
+  var C0 = window.EZ_CONFIG || {}, APPN = C0.appName || "EZ Staff", CON = C0.companyName || "EZ Storage";
   function tr(text) {
     if (!/[A-Za-z]/.test(text)) return text;
-    var out = full(text);
+    var out;
+    if (APPN !== "EZ Staff" || CON !== "EZ Storage") {
+      var norm = text.split(APPN).join("EZ Staff").split(CON).join("EZ Storage");
+      out = full(norm);
+      if (out !== null) out = out.split("EZ Staff").join(APPN).split("EZ Storage").join(CON);
+    } else out = full(text);
     if (out === null) return text;
     return text.match(/^\s*/)[0] + out + text.match(/\s*$/)[0];
   }

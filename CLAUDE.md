@@ -85,6 +85,17 @@ Ask for them before building an Android update; without the same key, phones mus
 - Rules: only tracked, active people write their own `live`/`route`; office reads. iPhone/PC can't track in the background.
 - `TrackSender` has no Android dependencies: test it on the JVM with the android-all jar against the emulator.
 
+## White label (3.1)
+
+- `fuel-app/whitelabel/make.py customers/<id> [--apk]` builds another company's copy into `whitelabel/dist/<id>/`
+  (git-ignored): config.js from `customer.json`, logo/icons, colours (recolours the EZ reds in app.css/app.js),
+  index.html/manifest names, Firebase deploy files, Android app with its own `appId` (`aapt --rename-manifest-package`;
+  Java stays in `com.ezstorage.fuel`; provider authority = `<appId>.files`), name and icons via `RES_DIR`.
+- `customers/ezstorage` (reference), `customers/_template`, `customers/demo-alnoor` (test company on the emulator).
+- App code reads `C.appName`/`C.companyName`; `i18n.js` maps them back to "EZ Staff"/"EZ Storage" for the dictionary.
+  Defaults for warehouses, shifts and OT come from config (`C.warehouses`, `C.shifts`, `C.ot`).
+- Guide for selling: `fuel-app/whitelabel/README.md`.
+
 ## Google Maps (3.0)
 
 - Live map uses Google Maps JS API when a key is set: `settings/company.mapsKey` (Company settings) or `mapsKey` in
@@ -103,5 +114,5 @@ Ask for them before building an Android update; without the same key, phones mus
 
 ## Versions so far
 
-EZ Staff 3.0 (Google Maps live map with place names, map in English/Arabic/satellite, Arabic, live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
+EZ Staff 3.1 (white label for other companies, Google Maps live map with place names, map in English/Arabic/satellite, Arabic, live location map, GPS then network-location fallback with reason shown, attendance, per-person fuel allowance, overtime, payroll, payslips; APK `fuel-app/android/EZFuel.apk`, label "EZ Staff", same package
 `com.ezstorage.fuel` so it updates EZ Fuel 1.x), Always On Tasks 2.0 (Android), Always On Tasks 1.0 (Windows).

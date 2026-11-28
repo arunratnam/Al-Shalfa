@@ -1,0 +1,58 @@
+{
+  "appName": "Company Staff",
+  "shortName": "Staff",
+  "companyName": "Company Name W.L.L.",
+  "appId": "com.companyname.staff",
+  "versionCode": 1,
+  "versionName": "1.0",
+  "brandColor": "#1f5fbf",
+  "firebase": {
+    "apiKey": "paste from Firebase -> Project settings -> Your apps",
+    "authDomain": "PROJECT-ID.firebaseapp.com",
+    "projectId": "PROJECT-ID",
+    "storageBucket": "PROJECT-ID.firebasestorage.app",
+    "messagingSenderId": "",
+    "appId": ""
+  },
+  "mapsKey": "",
+  "formTitle": "Fuel Expense Submission Form",
+  "docNo": "CO-OPS-FUEL-001",
+  "docVersion": "01",
+  "currency": "KD",
+  "departments": [
+    "Operations",
+    "Logistics",
+    "Warehouse",
+    "Delivery",
+    "Sales",
+    "Administration"
+  ],
+  "warehouses": [
+    {
+      "id": "main",
+      "name": "Main warehouse"
+    },
+    {
+      "id": "site2",
+      "name": "Site 2"
+    }
+  ],
+  "shifts": [
+    {
+      "id": "morning",
+      "name": "Morning",
+      "start": "07:00",
+      "end": "16:00"
+    }
+  ],
+  "ot": {
+    "standardHours": 8,
+    "daysPerMonth": 26,
+    "hoursPerDay": 8,
+    "normal": 1.25,
+    "rest": 1.5,
+    "holiday": 2,
+    "restDay": 5,
+    "roundMin": 15
+  }
+}

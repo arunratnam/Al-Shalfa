@@ -1,0 +1,57 @@
+{
+  "appName": "Al Noor Staff",
+  "shortName": "Al Noor",
+  "companyName": "Al Noor Logistics",
+  "appId": "com.alnoorlogistics.staff",
+  "versionCode": 1,
+  "versionName": "1.0",
+  "brandColor": "#0f6e5c",
+  "firebase": {
+    "apiKey": "demo-key",
+    "authDomain": "demo-ezfuel.firebaseapp.com",
+    "projectId": "demo-ezfuel",
+    "appId": "1:1:web:1"
+  },
+  "mapsKey": "",
+  "formTitle": "Fuel Expense Submission Form",
+  "docNo": "ANL-OPS-FUEL-001",
+  "docVersion": "01",
+  "currency": "KD",
+  "departments": [
+    "Operations",
+    "Logistics",
+    "Warehouse",
+    "Delivery",
+    "Sales",
+    "Administration"
+  ],
+  "warehouses": [
+    {
+      "id": "sulaibiya",
+      "name": "Sulaibiya"
+    },
+    {
+      "id": "jahra",
+      "name": "Jahra Yard"
+    }
+  ],
+  "shifts": [
+    {
+      "id": "morning",
+      "name": "Morning",
+      "start": "07:00",
+      "end": "16:00"
+    }
+  ],
+  "ot": {
+    "standardHours": 8,
+    "daysPerMonth": 26,
+    "hoursPerDay": 8,
+    "normal": 1.25,
+    "rest": 1.5,
+    "holiday": 2,
+    "restDay": 5,
+    "roundMin": 15
+  },
+  "useEmulators": true
+}

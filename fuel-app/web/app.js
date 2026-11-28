@@ -1,8 +1,10 @@
-/* EZ Storage Fuel Expense app: screens and behaviour. */
+/* Staff app (attendance, overtime, payroll, fuel claims): screens and behaviour. Company details come from config.js. */
 (function () {
   "use strict";
 
   var S = window.EZStore, C = window.EZ_CONFIG, P = window.EZPdf;
+  var APP = C.appName || "EZ Staff", CO = C.companyName || "";
+  try { document.title = APP; } catch (e) {}
   var LOCAL = S.mode === "local"; // one driver per phone, no server
   // Online, the office account (role "admin") sees every driver; drivers see their own bills.
   var $main, $nav;
@@ -389,8 +391,8 @@
       return;
     }
     top.hidden = false;
-    top.innerHTML = '<img class="logo" src="img/logo.png" alt="EZ Storage">' +
-      '<div class="title"><b>EZ Staff</b><span>' + esc(st.user.name) + (function (x) { return x ? " · " + esc(x) : ""; })(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
+    top.innerHTML = '<img class="logo" src="img/logo.png" alt="' + esc(CO) + '">' +
+      '<div class="title"><b>' + esc(APP) + '</b><span>' + esc(st.user.name) + (function (x) { return x ? " · " + esc(x) : ""; })(isOffice() ? S.ROLE_LABELS[role()] || role() : st.user.vehicle || "") + "</span></div>" +
       '<a class="avatar" href="#/profile" aria-label="Your profile">' + esc(initials(st.user.name)) + "</a>";
   }
 
@@ -418,8 +420,8 @@
 
   function viewLogin() {
     var demo = S.mode === "demo";
-    var h = '<div class="login"><div class="box"><div class="brand"><img src="img/logo.png" alt="EZ Storage">' +
-      "<h1>" + (LOCAL ? "Fuel Expense Claims" : "EZ Staff") + "</h1><p class=\"sub\" style=\"margin:4px 0 0\">" + (LOCAL ? "Submit fuel receipts, track approval and get reimbursed." : "Attendance, overtime and fuel claims for EZ Storage staff.") + "</p></div>";
+    var h = '<div class="login"><div class="box"><div class="brand"><img src="img/logo.png" alt="' + esc(CO) + '">' +
+      "<h1>" + (LOCAL ? "Fuel Expense Claims" : esc(APP)) + "</h1><p class=\"sub\" style=\"margin:4px 0 0\">" + (LOCAL ? "Submit fuel receipts, track approval and get reimbursed." : "Attendance, overtime and fuel claims for " + esc(CO) + " staff.") + "</p></div>";
     if (demo) {
       h += '<div class="banner warn" style="margin-bottom:14px">Demo mode: the app isn\'t connected to the company database yet. Pick a person to try it. Data stays on this device.</div><div class="stack">';
       S.demoUsers().forEach(function (u) {
@@ -812,7 +814,7 @@
   }
 
   function viewSetup() {
-    return '<div class="login"><div class="box"><div class="brand"><img src="img/logo.png" alt="EZ Storage">' +
+    return '<div class="login"><div class="box"><div class="brand"><img src="img/logo.png" alt="' + esc(CO) + '">' +
       '<h1>Fuel Expense Claims</h1><p class="sub" style="margin:4px 0 0">Add your fuel receipts, sign, and send the claim PDF to the office on WhatsApp.</p></div>' +
       '<form id="setup-form" class="card stack" novalidate><div class="eyebrow">Your details (once)</div>' +
       field("name", "Full name", "text", "", 'autocomplete="name" required') +
@@ -1278,7 +1280,7 @@
         '<button class="btn small" data-act="change-sig">' + (u.signature ? "Change" : "Add signature") + "</button></div>" : "") +
       '<div class="section-title"><h2>Install on your phone</h2></div><div class="card stack" style="font-size:14px">' +
       "<div><b>iPhone:</b> open this page in Safari → tap Share → <b>Add to Home Screen</b>.</div>" +
-      "<div><b>Android:</b> install the EZ Fuel app, or in Chrome tap ⋮ → <b>Add to Home screen</b>.</div></div>" +
+      "<div><b>Android:</b> install the " + esc(APP) + " app, or in Chrome tap ⋮ → <b>Add to Home screen</b>.</div></div>" +
       '<div class="section-title"><h2>Appearance</h2></div><div class="chips">' +
       ["system", "light", "dark"].map(function (t) { return '<button class="chip' + ((localStorage.getItem("ezfuel-theme") || "system") === t ? " on" : "") + '" data-act="theme" data-v="' + t + '">' + t[0].toUpperCase() + t.slice(1) + "</button>"; }).join("") + "</div>" +
       (LOCAL ? '<div class="banner info" style="margin-top:24px">Your claims and receipt photos are saved on this phone only. Uninstalling the app or clearing its data deletes them, so keep the PDFs you send on WhatsApp.</div>'
@@ -1820,9 +1822,10 @@
   // ------------------------------------------------------------------ attendance & overtime (online only)
 
   var TIME_DEFAULTS = {
-    warehouses: [{ id: "ardiya", name: "Ardiya" }, { id: "shuaiba", name: "Shuaiba" }, { id: "mina", name: "Mina Abdulla" }, { id: "yard", name: "Open Yard" }],
-    shifts: [{ id: "morning", name: "Morning", start: "06:00", end: "16:00" }, { id: "day", name: "Day", start: "08:00", end: "18:00" }],
-    ot: { standardHours: 10, daysPerMonth: 26, hoursPerDay: 8, normal: 1.25, rest: 1.5, holiday: 2, restDay: 5, roundMin: 15 },
+    // each company's starting values come from config.js; the admin changes them later in Company settings
+    warehouses: C.warehouses || [{ id: "ardiya", name: "Ardiya" }, { id: "shuaiba", name: "Shuaiba" }, { id: "mina", name: "Mina Abdulla" }, { id: "yard", name: "Open Yard" }],
+    shifts: C.shifts || [{ id: "morning", name: "Morning", start: "06:00", end: "16:00" }, { id: "day", name: "Day", start: "08:00", end: "18:00" }],
+    ot: Object.assign({ standardHours: 10, daysPerMonth: 26, hoursPerDay: 8, normal: 1.25, rest: 1.5, holiday: 2, restDay: 5, roundMin: 15 }, C.ot || {}),
     holidays: []
   };
 
@@ -1900,7 +1903,7 @@
     });
   }
   function locHelp() {
-    return locWhy === "denied" ? "Location is blocked for EZ Staff: allow it in the phone's Settings → Apps → EZ Staff → Permissions → Location"
+    return locWhy === "denied" ? "Location is blocked for " + APP + ": allow it in the phone's Settings → Apps → " + APP + " → Permissions → Location"
       : locWhy === "off" ? "Location is off: turn on Location in the phone's quick settings"
       : "Location wasn't found in time: turn on Location (and Wi-Fi) and try outside or near a door";
   }
@@ -1961,7 +1964,7 @@
     if (hasTrack(st.user) && openEntry(st.att, st.user.uid)) {
       h += '<div class="track-note">' + ICON.pin + "<span>" + (canTrackHere()
         ? (st.trackMsg || "Your location is shared with the office until you clock out.")
-        : "Live location works in the EZ Staff Android app. On this phone only your clock in and out places are saved.") + "</span></div>";
+        : "Live location works in the " + APP + " Android app. On this phone only your clock in and out places are saved.") + "</span></div>";
     }
     return h + '<a class="link" href="' + myHref("time") + '" style="text-align:left">My time and overtime →</a></div>';
   }
@@ -2478,7 +2481,7 @@
     document.getElementById("demo").hidden = true;
     if (st.user.active === false) {
       $main.innerHTML = st.user.pending
-        ? '<div class="login"><div class="box card stack" style="text-align:center"><img src="img/logo.png" alt="EZ Storage" style="width:150px;margin:0 auto">' +
+        ? '<div class="login"><div class="box card stack" style="text-align:center"><img src="img/logo.png" alt="' + esc(CO) + '" style="width:150px;margin:0 auto">' +
           '<h1>Waiting for approval</h1><p class="sub" style="margin:0">Your account (' + esc(st.user.email || "") + ') was created. The admin needs to allow it before you can use the app. This page opens by itself once you are allowed.</p>' +
           '<button class="btn" data-act="signout">Sign out</button></div></div>'
         : '<div class="card empty"><b>Your account is turned off</b>Ask the admin to turn it back on.<div style="margin-top:14px"><button class="btn" data-act="signout">Sign out</button></div></div>';
@@ -2796,7 +2799,7 @@
         if (!info) { st.trackKey = ""; return; }
         var r = window.EZAndroid.startTracking(JSON.stringify(info));
         st.trackMsg = r === "ok" ? "" : r === "no-permission"
-          ? "Location is blocked, so the office can't see where you are. Allow it in Settings → Apps → EZ Staff → Permissions → Location."
+          ? "Location is blocked, so the office can't see where you are. Allow it in Settings → Apps → " + APP + " → Permissions → Location."
           : "Live location couldn't start (" + r + ").";
         if (r !== "ok") st.trackKey = "";
       } else {
@@ -2816,7 +2819,7 @@
       '<div class="spread" style="margin:14px 0 8px"><h2 style="margin:0">People on the map</h2>' +
       '<input type="date" class="mini-date" data-mapdate="1" aria-label="Route date" value="' + esc(date) + '" max="' + esc(today()) + '"></div>' +
       '<div class="card flush list" id="map-list"></div>' +
-      '<p class="sub" style="font-size:13px">Live location is shared from the EZ Staff Android app while people are clocked in, if you ticked ' +
+      '<p class="sub" style="font-size:13px">Live location is shared from the ' + esc(APP) + ' Android app while people are clocked in, if you ticked ' +
       '<b>Live location on duty</b> for them on the People page. Tap a person to see their route for the day.</p>';
   }
 

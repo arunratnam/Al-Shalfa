@@ -18,6 +18,7 @@ window.EZ_CONFIG = {
   // The admin can replace it in Company settings.
   mapsKey: "AIzaSyAhttQVTyZn6-jDKTcUkfYNS-9nbWuh3dE",
 
+  appName: "EZ Staff",
   companyName: "EZ Storage",
   formTitle: "Fuel Expense Submission Form",
   docNo: "EZ-OPS-FUEL-002",
